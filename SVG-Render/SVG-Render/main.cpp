@@ -1,5 +1,7 @@
 ﻿#include "readsvg.h"
 #include "svgdocument.h"
+#include "rect.h"
+#include "polygon.h"
 using namespace Gdiplus;
 // ============================================================================
 // DEBUG MAIN // PROJECT -> LINKER -> SUBSYSTEM -> Console (/SUBSYSTEM:CONSOLE)
@@ -52,10 +54,51 @@ INT WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, PSTR, INT iCmdShow)
     // ============================================================================
     // CODE ... rect, text, circle, polyline, ellipse, line, polygon 
    
+    //
+	SVGRECT* rect = new SVGRECT(20,20,800,400,0,0);
+	rect->EnableFill(200, 100, 150); // Red fill
+	rect->SetFillOpacity(0.2f);
+	rect->EnableStroke(555, 55, 55, 2.0f); // Black stroke
+
+	g_doc.AddShape(rect);
+
+	SVGRECT* rect2 = new SVGRECT(0, 0, 200, 50, 0.0f, 0.0f);
+    rect2->SetFillOpacity(0.0f);
+    rect2->EnableStroke(255, 0, 0, 2.0f);
+	g_doc.AddShape(rect2);
 
 
+	SVGPOLYGON* polygon = new SVGPOLYGON();
 
+    //350,75 379,161 469,161 397,215 423,301 350,250 277,301 303,215 231,161 321,161
+	polygon->AddPoint(350.0f, 75.0f);
+	polygon->AddPoint(379.0f, 161.0f);
+	polygon->AddPoint(469.0f, 161.0f);
+	polygon->AddPoint(397.0f, 215.0f);
+	polygon->AddPoint(423.0f, 301.0f);
+	polygon->AddPoint(350.0f, 250.0f);
+	polygon->AddPoint(277.0f, 301.0f);
+	polygon->AddPoint(303.0f, 215.0f);
+	polygon->AddPoint(231.0f, 161.0f);
+	polygon->AddPoint(321.0f, 161.0f);
+	polygon->EnableFill(255, 255, 0);
+	polygon->SetFillOpacity(0.6f);
+	polygon->EnableStroke(250, 0, 0, 10.0f);
 
+	SVGPOLYGON* polygon2 = new SVGPOLYGON();
+    //points="850,75 958,137 958,262 850,325 742,262 742,137"
+	polygon2->AddPoint(850.0f, 75.0f);
+	polygon2->AddPoint(958.0f, 137.0f);
+	polygon2->AddPoint(958.0f, 262.0f);
+	polygon2->AddPoint(850.0f, 325.0f);
+	polygon2->AddPoint(742.0f, 262.0f);
+	polygon2->AddPoint(742.0f, 137.0f);
+    polygon2->EnableFill(153, 204, 255);
+	polygon2->SetFillOpacity(0.5f);
+	polygon2->EnableStroke(255, 0, 102, 10.0f);
+
+	g_doc.AddShape(polygon);
+	g_doc.AddShape(polygon2);
     // g_doc.AddShape(...);
     // ============================================================================
     HWND                hWnd;

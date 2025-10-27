@@ -1,3 +1,5 @@
 ﻿  main.cpp
-C:\Users\Mr.Dat09\source\repos\SVG-Render\SVG-Render\SVG-Render\main.cpp(96,15): warning C4244: 'return': conversion from 'WPARAM' to 'int', possible loss of data
-  SVG-Render.vcxproj -> C:\Users\Mr.Dat09\source\repos\SVG-Render\SVG-Render\x64\Debug\SVG-Render.exe
+C:\Users\Thanh Du\source\repos\SVG-Render\SVG-Render\SVG-Render\main.cpp(61,21): warning C4305: 'argument': truncation from 'int' to 'BYTE'
+C:\Users\Thanh Du\source\repos\SVG-Render\SVG-Render\SVG-Render\main.cpp(61,21): warning C4309: 'argument': truncation of constant value
+C:\Users\Thanh Du\source\repos\SVG-Render\SVG-Render\SVG-Render\main.cpp(148,15): warning C4244: 'return': conversion from 'WPARAM' to 'int', possible loss of data
+  SVG-Render.vcxproj -> C:\Users\Thanh Du\Source\Repos\SVG-Render\SVG-Render\x64\Debug\SVG-Render.exe
