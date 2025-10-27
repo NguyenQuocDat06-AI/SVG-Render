@@ -1,3 +1,8 @@
 ﻿  main.cpp
-C:\Users\Mr.Dat09\source\repos\SVG-Render\SVG-Render\SVG-Render\main.cpp(96,15): warning C4244: 'return': conversion from 'WPARAM' to 'int', possible loss of data
-  SVG-Render.vcxproj -> C:\Users\Mr.Dat09\source\repos\SVG-Render\SVG-Render\x64\Debug\SVG-Render.exe
+C:\Users\Thanh Du\source\repos\SVG-Render\SVG-Render\SVG-Render\main.cpp(105,15): warning C4244: 'return': conversion from 'WPARAM' to 'int', possible loss of data
+  readsvg.cpp
+C:\Users\Thanh Du\source\repos\SVG-Render\SVG-Render\SVG-Render\readsvg.cpp(43,15): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+  svgdocument.cpp
+  svgshape.cpp
+  Generating Code...
+  SVG-Render.vcxproj -> C:\Users\Thanh Du\Source\Repos\SVG-Render\SVG-Render\x64\Debug\SVG-Render.exe
