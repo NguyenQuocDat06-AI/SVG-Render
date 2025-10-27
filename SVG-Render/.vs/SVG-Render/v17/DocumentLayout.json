@@ -1,7 +1,16 @@
 {
   "Version": 1,
-  "WorkspaceRootPath": "C:\\Users\\Mr.Dat09\\source\\repos\\SVG-Render\\SVG-Render\\",
-  "Documents": [],
+  "WorkspaceRootPath": "C:\\Users\\TOSHIBA\\source\\repos\\SVG-Render\\SVG-Render\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{EFFF7448-645D-42CD-A350-D415D9CA28B3}|SVG-Render\\SVG-Render.vcxproj|C:\\Users\\TOSHIBA\\source\\repos\\SVG-Render\\SVG-Render\\SVG-Render\\svgshape.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{EFFF7448-645D-42CD-A350-D415D9CA28B3}|SVG-Render\\SVG-Render.vcxproj|solutionrelative:SVG-Render\\svgshape.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{EFFF7448-645D-42CD-A350-D415D9CA28B3}|SVG-Render\\SVG-Render.vcxproj|C:\\Users\\TOSHIBA\\source\\repos\\SVG-Render\\SVG-Render\\SVG-Render\\svgshape.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{EFFF7448-645D-42CD-A350-D415D9CA28B3}|SVG-Render\\SVG-Render.vcxproj|solutionrelative:SVG-Render\\svgshape.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    }
+  ],
   "DocumentGroupContainers": [
     {
       "Orientation": 0,
@@ -9,11 +18,45 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": -1,
+          "SelectedChildIndex": 3,
           "Children": [
             {
               "$type": "Bookmark",
               "Name": "ST:0:0:{56df62a4-05a3-4e5b-aa1a-99371ccfb997}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "svgshape.h",
+              "DocumentMoniker": "C:\\Users\\TOSHIBA\\source\\repos\\SVG-Render\\SVG-Render\\SVG-Render\\svgshape.h",
+              "RelativeDocumentMoniker": "SVG-Render\\svgshape.h",
+              "ToolTip": "C:\\Users\\TOSHIBA\\source\\repos\\SVG-Render\\SVG-Render\\SVG-Render\\svgshape.h",
+              "RelativeToolTip": "SVG-Render\\svgshape.h",
+              "ViewState": "AgIAAEgAAAAAAAAAAAAAAFMAAAAJAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-10-27T13:14:16Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "svgshape.cpp",
+              "DocumentMoniker": "C:\\Users\\TOSHIBA\\source\\repos\\SVG-Render\\SVG-Render\\SVG-Render\\svgshape.cpp",
+              "RelativeDocumentMoniker": "SVG-Render\\svgshape.cpp",
+              "ToolTip": "C:\\Users\\TOSHIBA\\source\\repos\\SVG-Render\\SVG-Render\\SVG-Render\\svgshape.cpp",
+              "RelativeToolTip": "SVG-Render\\svgshape.cpp",
+              "ViewState": "AgIAAFIAAAAAAAAAAAAuwFwAAAA4AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-10-27T12:59:30.847Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{1c4feeaa-4718-4aa9-859d-94ce25d182ba}"
             }
           ]
         }
