@@ -38,5 +38,11 @@
     <ClInclude Include="svgdocument.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="polygon.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="rect.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

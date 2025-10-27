@@ -124,12 +124,16 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="polygon.cpp" />
     <ClCompile Include="readsvg.cpp" />
+    <ClCompile Include="rect.cpp" />
     <ClCompile Include="svgdocument.cpp" />
     <ClCompile Include="svgshape.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="polygon.h" />
     <ClInclude Include="readsvg.h" />
+    <ClInclude Include="rect.h" />
     <ClInclude Include="svgdocument.h" />
     <ClInclude Include="svgshape.h" />
   </ItemGroup>
