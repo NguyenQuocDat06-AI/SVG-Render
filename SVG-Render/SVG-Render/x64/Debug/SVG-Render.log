@@ -1,5 +1,7 @@
-﻿  main.cpp
-C:\Users\Thanh Du\source\repos\SVG-Render\SVG-Render\SVG-Render\main.cpp(61,21): warning C4305: 'argument': truncation from 'int' to 'BYTE'
-C:\Users\Thanh Du\source\repos\SVG-Render\SVG-Render\SVG-Render\main.cpp(61,21): warning C4309: 'argument': truncation of constant value
-C:\Users\Thanh Du\source\repos\SVG-Render\SVG-Render\SVG-Render\main.cpp(148,15): warning C4244: 'return': conversion from 'WPARAM' to 'int', possible loss of data
-  SVG-Render.vcxproj -> C:\Users\Thanh Du\Source\Repos\SVG-Render\SVG-Render\x64\Debug\SVG-Render.exe
+﻿  circle.cpp
+  main.cpp
+C:\Project\OOP_Ellipse_Circle\SVG-Render\SVG-Render\main.cpp(63,21): warning C4305: 'argument': truncation from 'int' to 'BYTE'
+C:\Project\OOP_Ellipse_Circle\SVG-Render\SVG-Render\main.cpp(63,21): warning C4309: 'argument': truncation of constant value
+C:\Project\OOP_Ellipse_Circle\SVG-Render\SVG-Render\main.cpp(166,15): warning C4244: 'return': conversion from 'WPARAM' to 'int', possible loss of data
+  Generating Code...
+  SVG-Render.vcxproj -> C:\Project\OOP_Ellipse_Circle\SVG-Render\x64\Debug\SVG-Render.exe

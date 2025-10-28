@@ -123,6 +123,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="circle.cpp" />
+    <ClCompile Include="ellipse.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="polygon.cpp" />
     <ClCompile Include="readsvg.cpp" />
@@ -131,6 +133,8 @@
     <ClCompile Include="svgshape.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="circle.h" />
+    <ClInclude Include="ellipse.h" />
     <ClInclude Include="polygon.h" />
     <ClInclude Include="readsvg.h" />
     <ClInclude Include="rect.h" />

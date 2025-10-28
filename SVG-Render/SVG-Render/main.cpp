@@ -2,6 +2,8 @@
 #include "svgdocument.h"
 #include "rect.h"
 #include "polygon.h"
+#include "ellipse.h"
+#include "circle.h"
 using namespace Gdiplus;
 // ============================================================================
 // DEBUG MAIN // PROJECT -> LINKER -> SUBSYSTEM -> Console (/SUBSYSTEM:CONSOLE)
@@ -99,6 +101,22 @@ INT WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, PSTR, INT iCmdShow)
 
 	g_doc.AddShape(polygon);
 	g_doc.AddShape(polygon2);
+
+
+    SVGELLIPSE* ellipse = new SVGELLIPSE(500.0f, 100.0f, 100.0f, 50.0f);
+    ellipse->EnableFill(0, 255, 0); // Green fill
+    ellipse->SetFillOpacity(0.5f);
+    ellipse->EnableStroke(255, 255, 0, 3.0f); // Yellow stroke
+    ellipse->SetStrokeOpacity(0.7f);
+    g_doc.AddShape(ellipse);
+
+	SVGCIRCLE* circle = new SVGCIRCLE(200.0f, 300.0f, 100.0f);
+	circle->EnableFill(255, 255, 0); // Yellow fill
+	circle->SetFillOpacity(0.5f);
+	circle->EnableStroke(0, 255, 255, 10.0f); // Cyan stroke
+	circle->SetStrokeOpacity(0.7f);
+	g_doc.AddShape(circle);
+
     // g_doc.AddShape(...);
     // ============================================================================
     HWND                hWnd;
