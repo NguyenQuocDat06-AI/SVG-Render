@@ -125,8 +125,10 @@
   <ItemGroup>
     <ClCompile Include="circle.cpp" />
     <ClCompile Include="ellipse.cpp" />
+    <ClCompile Include="line.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="polygon.cpp" />
+    <ClCompile Include="polyline.cpp" />
     <ClCompile Include="readsvg.cpp" />
     <ClCompile Include="rect.cpp" />
     <ClCompile Include="svgdocument.cpp" />
@@ -135,7 +137,9 @@
   <ItemGroup>
     <ClInclude Include="circle.h" />
     <ClInclude Include="ellipse.h" />
+    <ClInclude Include="line.h" />
     <ClInclude Include="polygon.h" />
+    <ClInclude Include="polyline.h" />
     <ClInclude Include="readsvg.h" />
     <ClInclude Include="rect.h" />
     <ClInclude Include="svgdocument.h" />

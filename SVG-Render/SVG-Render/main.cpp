@@ -4,6 +4,8 @@
 #include "polygon.h"
 #include "ellipse.h"
 #include "circle.h"
+#include "line.h"
+#include "polyline.h"
 using namespace Gdiplus;
 // ============================================================================
 // DEBUG MAIN // PROJECT -> LINKER -> SUBSYSTEM -> Console (/SUBSYSTEM:CONSOLE)
@@ -109,13 +111,71 @@ INT WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, PSTR, INT iCmdShow)
     ellipse->SetStrokeOpacity(0.7f);
     g_doc.AddShape(ellipse);
 
+
 	SVGCIRCLE* circle = new SVGCIRCLE(200.0f, 300.0f, 100.0f);
 	circle->EnableFill(255, 255, 0); // Yellow fill
 	circle->SetFillOpacity(0.5f);
 	circle->EnableStroke(0, 255, 255, 10.0f); // Cyan stroke
 	circle->SetStrokeOpacity(0.7f);
 	g_doc.AddShape(circle);
+
+
+    SVGPOLYLINE* polyline = new SVGPOLYLINE({
+        PointF(5, 37), PointF(15, 37), PointF(15, 32),
+        PointF(25, 32), PointF(25, 37), PointF(35, 37),
+        PointF(35, 25), PointF(45, 25), PointF(45, 37),
+        PointF(55, 37), PointF(55, 17), PointF(65, 17),
+        PointF(65, 37), PointF(75, 37), PointF(75, 10),
+        PointF(85, 10), PointF(85, 37), PointF(95, 37),
+        PointF(95, 2),  PointF(105, 2), PointF(105, 37),
+        PointF(115, 37)
+        });
+
+    // === Thiết lập màu và độ trong suốt ===
+    polyline->EnableStroke(255, 0, 0, 2.0f); // stroke đỏ, dày 2px
+    polyline->SetStrokeOpacity(0.7f);
+    polyline->EnableFill(0, 255, 255);       // fill cyan
+    polyline->SetFillOpacity(0.5f);
+    g_doc.AddShape(polyline);
+
+
+    SVGLINE* line1 = new SVGLINE(10, 30, 30, 10);
+    line1->EnableStroke(0, 0, 255, 5.0f);
+    line1->SetStrokeOpacity(0.7f);
+    g_doc.AddShape(line1);
+
+    SVGLINE* line2 = new SVGLINE(30, 30, 50, 10);
+    line2->EnableStroke(0, 0, 255, 10.0f);
+    line2->SetStrokeOpacity(0.8f);
+    g_doc.AddShape(line2);
+
+    SVGLINE* line3 = new SVGLINE(50, 30, 70, 10);
+    line3->EnableStroke(0, 0, 255, 15.0f);
+    line3->SetStrokeOpacity(0.9f);
+    g_doc.AddShape(line3);
+
+    SVGLINE* line4 = new SVGLINE(70, 30, 90, 10);
+    line4->EnableStroke(0, 0, 255, 20.0f);
+    line4->SetStrokeOpacity(0.9f);
+    g_doc.AddShape(line4);
+
+    SVGLINE* line5 = new SVGLINE(90, 30, 110, 10);
+    line5->EnableStroke(0, 0, 255, 25.0f);
+    line5->SetStrokeOpacity(1.0f);
+    g_doc.AddShape(line5);
     g_doc.AddShape(polygon);
+
+    SVGPOLYLINE* poly = new SVGPOLYLINE({
+        PointF(0,40), PointF(40, 40), PointF(40, 80),
+        PointF(80, 80), PointF(80, 120), PointF(120, 120),PointF(120, 140)
+        });
+    // Màu viền: đỏ, độ dày 2, độ trong suốt 0.7
+    /*poly->EnableStroke(100, 100, 100, 2.0f);
+    poly->SetStrokeOpacity(1.0f);*/
+    // Màu tô: cyan, độ trong suốt 0.5
+    poly->EnableFill(128, 128, 128);
+    poly->SetFillOpacity(1.0f);
+    g_doc.AddShape(poly);
     // g_doc.AddShape(...);
     // ============================================================================
     HWND                hWnd;
