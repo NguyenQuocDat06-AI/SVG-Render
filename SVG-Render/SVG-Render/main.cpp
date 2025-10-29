@@ -99,7 +99,6 @@ INT WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, PSTR, INT iCmdShow)
 	polygon2->SetFillOpacity(0.5f);
 	polygon2->EnableStroke(255, 0, 102, 10.0f);
 
-	g_doc.AddShape(polygon);
 	g_doc.AddShape(polygon2);
 
 
@@ -116,7 +115,7 @@ INT WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, PSTR, INT iCmdShow)
 	circle->EnableStroke(0, 255, 255, 10.0f); // Cyan stroke
 	circle->SetStrokeOpacity(0.7f);
 	g_doc.AddShape(circle);
-
+    g_doc.AddShape(polygon);
     // g_doc.AddShape(...);
     // ============================================================================
     HWND                hWnd;
