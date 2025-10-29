@@ -1,12 +1,5 @@
-﻿  circle.cpp
-  ellipse.cpp
-  main.cpp
-C:\Users\Thanh Du\source\repos\SVG-Render\SVG-Render\SVG-Render\main.cpp(63,21): warning C4305: 'argument': truncation from 'int' to 'BYTE'
-C:\Users\Thanh Du\source\repos\SVG-Render\SVG-Render\SVG-Render\main.cpp(63,21): warning C4309: 'argument': truncation of constant value
-C:\Users\Thanh Du\source\repos\SVG-Render\SVG-Render\SVG-Render\main.cpp(165,15): warning C4244: 'return': conversion from 'WPARAM' to 'int', possible loss of data
-  polygon.cpp
-  rect.cpp
-  svgdocument.cpp
-  svgshape.cpp
+﻿  main.cpp
+  readsvg.cpp
+C:\Users\Thanh Du\source\repos\SVG-Render\SVG-Render\SVG-Render\readsvg.cpp(43,15): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
   Generating Code...
   SVG-Render.vcxproj -> C:\Users\Thanh Du\source\repos\SVG-Render\SVG-Render\x64\Debug\SVG-Render.exe

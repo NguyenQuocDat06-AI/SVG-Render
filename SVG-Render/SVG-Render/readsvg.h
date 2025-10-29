@@ -26,6 +26,24 @@ public:
 	READSVG();
 	void ParseFromBuffer(const string& _path); // Lưu vào các node
 	void PrintNode();
+	vector<int> getColor(const string& str);
+	ATTRIBUTE GetNode(int index);
+	vector<int> GetFill(int index);
+	float GetFillOpacity(int index);
+	float GetHeight(int index);
+	float GetWidth(int index);
+	vector<int> GetStroke(int index);
+	float GetStrokeOpacity(int index);
+	float GetStrokeWidth(int index);
+	float GetX(int index);
+	float GetY(int index);
+	float GetCx(int index);
+	float GetCy(int index);
+	float GetRx(int index);
+	float GetRy(int index);
+	float GetR(int index);
+	vector<pair<float, float>> GetPoints(int index);
+	pair<float, float> GetSize(int index);
 	~READSVG();
 };
 #endif // !READSVG_H
