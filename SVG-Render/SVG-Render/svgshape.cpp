@@ -17,6 +17,13 @@ SVGSHAPE::SVGSHAPE() {
     overallOpacity = 1.0f;
     hasTransform = false;
 }
+void SVGSHAPE::SetVisible(bool v) {
+    visible = v;
+}
+
+void SVGSHAPE::SetDisplayNone(bool d) {
+    displayNone = d;
+}
 void SVGSHAPE::EnableFill(BYTE r, BYTE g, BYTE b) {
     hasFill = true;
     fillColor = Gdiplus::Color(255, r, g, b); // alpha tạm đặt 255
@@ -44,6 +51,7 @@ void SVGSHAPE::SetStrokeWidth(float w) {
 void SVGSHAPE::SetOverallOpacity(float op) {
     overallOpacity = op;
 }
+
 void SVGSHAPE::Draw(Gdiplus::Graphics& g) const {
     if (!visible) return;
     if (displayNone) return;
