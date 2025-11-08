@@ -1,5 +1,11 @@
+<<<<<<< HEAD
 ﻿  main.cpp
 C:\Project\OOP_Ellipse_Circle\SVG-Render\SVG-Render\main.cpp(63,21): warning C4305: 'argument': truncation from 'int' to 'BYTE'
 C:\Project\OOP_Ellipse_Circle\SVG-Render\SVG-Render\main.cpp(63,21): warning C4309: 'argument': truncation of constant value
 C:\Project\OOP_Ellipse_Circle\SVG-Render\SVG-Render\main.cpp(167,15): warning C4244: 'return': conversion from 'WPARAM' to 'int', possible loss of data
   SVG-Render.vcxproj -> C:\Project\OOP_Ellipse_Circle\SVG-Render\x64\Debug\SVG-Render.exe
+=======
+﻿  readsvg.cpp
+C:\Users\Mr.Dat09\source\repos\SVG-Render\SVG-Render\SVG-Render\readsvg.cpp(95,15): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+  SVG-Render.vcxproj -> C:\Users\Mr.Dat09\source\repos\SVG-Render\SVG-Render\x64\Debug\SVG-Render.exe
+>>>>>>> origin/main

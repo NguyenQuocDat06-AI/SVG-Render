@@ -61,44 +61,4 @@ public:
 
     virtual void DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStrokeAlpha) const = 0;
 };
-class SvgPolyline : public SVGSHAPE {
-protected:
-    std::vector<Gdiplus::PointF> points;
-
-public:
-    SvgPolyline() = default;
-    SvgPolyline(const std::vector<Gdiplus::PointF>& pts);
-
-    void AddPoint(float x, float y);
-    void SetPoints(const std::vector<Gdiplus::PointF>& pts);
-    const std::vector<Gdiplus::PointF>& GetPoints() const;
-
-protected:
-    void DrawImpl(Gdiplus::Graphics& g, BYTE fillA, BYTE strokeA) const override;
-};
-
-class SvgText : public SVGSHAPE {
-protected:
-    float x;
-    float y;
-    std::string text;
-    std::string fontFamily;
-    float fontSize;
-    std::string fontWeight; // "normal", "bold"
-    std::string fontStyle;  // "normal", "italic"
-    std::string textAnchor; // "start", "middle", "end"
-
-public:
-    SvgText(float x, float y, const std::string& content);
-
-    void SetText(const std::string& content);
-    void SetPosition(float x, float y);
-    void SetFont(const std::string& family, float size);
-    void SetStyle(const std::string& weight, const std::string& style);
-    void SetAnchor(const std::string& anchor);
-
-protected:
-    void DrawImpl(Gdiplus::Graphics& g, BYTE fillA, BYTE strokeA) const override;
-};
-
 #endif // !SVGSHAPE_H
