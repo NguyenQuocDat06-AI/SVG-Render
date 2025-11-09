@@ -1,26 +1,42 @@
-  
 <?xml version="1.0" encoding="UTF-8"?>
-<svg width="800" height="500" viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg">
-    <!-- RECT -->
-    <rect x="50" y="50" width="200" height="100" fill="red" fill-opacity="0.4" stroke="black" stroke-width="3" />
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="450" viewBox="0 0 900 450">
+  <!-- subtle framed background -->
+  <rect x="12" y="12" width="876" height="426" fill-opacity="0.02" stroke="rgb(190,190,190)" stroke-width="3" rx="8" />
 
-    <!-- CIRCLE -->
-    <circle cx="400" cy="100" r="60" fill="yellow" stroke="blue" stroke-width="5" />
+  <!-- colorful panel -->
+  <rect x="18" y="18" width="864" height="420" fill="rgb(220,120,170)" fill-opacity="0.18" stroke="rgb(20,20,30)" stroke-width="1" rx="6" />
 
-    <!-- ELLIPSE -->
-    <ellipse cx="650" cy="100" rx="80" ry="40" fill="lime" fill-opacity="0.5" />
+  <!-- title -->
+  <text x="28" y="62" fill="rgb(10,40,200)" font-size="44" font-family="Segoe UI, Arial">SVG Demo — Mẫu tương tự</text>
 
-    <!-- LINE -->
-    <line x1="50" y1="200" x2="250" y2="300" stroke="purple" stroke-width="4"/>
+  <!-- transparent hotspot rectangle -->
+  <rect x="26" y="80" width="220" height="56" fill-opacity="0" stroke="rgb(200,30,30)" stroke-width="2" rx="6" />
 
-    <!-- POLYLINE (không stroke -> SVG default stroke=none, fill=black) -->
-    <polyline points="350,200 400,250 450,200 500,250 550,200" fill-opacity="0.5"/>
+  <!-- author -->
+  <text x="560" y="410" fill="rgb(230,10,210)" font-size="30" font-family="Tahoma, Arial">Nguyễn Quoc Đạt</text>
 
-    <!-- POLYGON -->
-    <polygon points="650,180 700,260 600,260" force-fill="cyan" stroke="black" stroke-width="2"/>
+  <!-- layered circle with thick stroke -->
+  <circle cx="220" cy="310" r="92" fill="rgb(255,245,90)" fill-opacity="0.6" stroke="rgb(40,40,40)" stroke-width="10" stroke-opacity="0.75" />
 
-    <!-- TEXT -->
-    <text x="400" y="400" font-size="36" font-family="Times New Roman" fill="magenta">
-        Nguyen Van A
-    </text>
+  <!-- smooth ellipse -->
+  <ellipse cx="560" cy="110" rx="120" ry="58" fill="rgb(0,240,80)" fill-opacity="0.5" stroke="rgb(0,110,40)" stroke-width="4" stroke-opacity="0.7" />
+
+  <!-- diagonal lines with increasing stroke width -->
+  <line x1="18" y1="120" x2="80" y2="38" stroke="rgb(0,0,200)" stroke-width="6" stroke-opacity="0.7" />
+  <line x1="80" y1="120" x2="140" y2="38" stroke="rgb(0,0,200)" stroke-width="10" stroke-opacity="0.8" />
+  <line x1="142" y1="120" x2="204" y2="38" stroke="rgb(0,0,200)" stroke-width="14" stroke-opacity="0.9" />
+  <line x1="204" y1="120" x2="266" y2="38" stroke="rgb(0,0,200)" stroke-width="18" stroke-opacity="1.0" />
+
+  <!-- stepped polyline (decorative) -->
+  <polyline points="0,46 46,46 46,92 92,92 92,138 138,138 138,156" fill-opacity="0.45" />
+
+  <!-- jagged polyline like in sample -->
+  <polyline points="320,30 380,30 380,70 440,70 440,30 500,30 500,70 560,70 560,30 620,30" stroke="rgb(180,20,20)" stroke-width="3" fill="none" stroke-opacity="0.9" />
+
+  <!-- decorative polygon (hexagon) -->
+  <polygon points="800,75 880,120 880,210 800,255 720,210 720,120" fill="rgb(150,200,255)" fill-opacity="0.55" stroke="rgb(40,80,120)" stroke-width="2" stroke-opacity="0.7" />
+
+  <!-- star-like polygon -->
+  <polygon points="420,160 460,220 540,220 480,270 500,350 420,300 340,350 360,270 300,220 380,220" fill="rgb(255,240,90)" fill-opacity="0.65" stroke="rgb(180,140,30)" stroke-width="2" />
+
 </svg>

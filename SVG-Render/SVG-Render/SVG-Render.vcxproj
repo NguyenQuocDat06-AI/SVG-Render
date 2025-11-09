@@ -147,6 +147,12 @@
     <ClInclude Include="svgshape.h" />
     <ClInclude Include="text.h" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="sample.svg" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="color.txt" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

@@ -139,6 +139,9 @@ public:
     // ========= Tiện ích khác =========
     // Trả kích thước nếu có thể suy ra (vd với rect, image)
     std::pair<float, float> GetSize(int index); // giữ API cũ
+    std::string GetAttrRaw(int i, const char* key);
+    std::string FindInStyle(int i, const char* prop);
+    bool IsFillNone(int i);
 };
 
 #endif // !READSVG_H

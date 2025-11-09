@@ -639,3 +639,32 @@ std::pair<float, float> READSVG::GetSize(int index) {
     }
     return { 0.f, 0.f };
 }
+
+string READSVG::GetAttrRaw(int i, const char* key) {
+    auto att = GetAttributes(i);
+    auto it = att.find(key);
+    return (it == att.end()) ? std::string() : it->second;
+}
+
+string READSVG::FindInStyle(int i, const char* prop) {
+    auto att = GetAttributes(i);
+    auto it = att.find("style");
+    if (it == att.end()) return {};
+    const std::string& s = it->second;
+    auto p = s.find(prop);
+    if (p == std::string::npos) return {};
+    p += std::strlen(prop);
+    auto q = s.find(';', p);
+    std::string v = s.substr(p, (q == std::string::npos) ? std::string::npos : q - p);
+    // trim nhẹ
+    auto l = v.find_first_not_of(" \t\r\n");
+    auto r = v.find_last_not_of(" \t\r\n");
+    return (l == std::string::npos) ? std::string() : v.substr(l, r - l + 1);
+}
+bool READSVG::IsFillNone(int i) {
+    std::string v = FindInStyle(i, "fill:");
+    if (v.empty()) v = GetAttrRaw(i, "fill");
+    // so sánh lower-case
+    for (auto& c : v) c = (char)tolower((unsigned char)c);
+    return v == "none";
+}
