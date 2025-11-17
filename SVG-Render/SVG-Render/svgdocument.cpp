@@ -1,4 +1,5 @@
 ﻿#include "svgdocument.h"
+SVGDOCUMENT::SVGDOCUMENT() : zoomFactor(1.0f), rotateAngle(0.0){}
 SVGDOCUMENT::~SVGDOCUMENT() {
     for (auto s : shapes) delete s;
 }
@@ -6,10 +7,18 @@ void SVGDOCUMENT::AddShape(SVGSHAPE* s) {
     shapes.push_back(s);
 }
 
-void SVGDOCUMENT::Render(Gdiplus::Graphics& g) const {
+void SVGDOCUMENT::Render(Gdiplus::Graphics& g, int windowWidth, int windowHeight) const {
+	g.Clear(Gdiplus::Color(255, 255, 255, 255)); // nền trắng
+	float centerX = windowWidth / 2.0f;
+	float centerY = windowHeight / 2.0f;
+	g.TranslateTransform(centerX, centerY);
+	g.RotateTransform(rotateAngle);
+	g.TranslateTransform(-centerX, -centerY);
+    g.ScaleTransform(zoomFactor, zoomFactor);
     for (auto s : shapes) {
         s->Draw(g);
     }
+    g.ResetTransform();
 }
 BYTE SVGDOCUMENT::clamp255(int v) {
     if (v < 0) v = 0; else if (v > 255) v = 255;
@@ -135,4 +144,16 @@ void SVGDOCUMENT::LoadSvgToDocument(const std::string& path) {
         // }
         // các tag khác (defs, g, use, image, ...) tùy bạn bổ sung dần
     }
+}
+void SVGDOCUMENT::ZoomIn() {
+    zoomFactor *= 1.1f;
+}
+void SVGDOCUMENT::ZoomOut() {
+    zoomFactor *= 0.9f;
+}
+void SVGDOCUMENT::RotateLeft() {
+    rotateAngle -= 5.0f;
+}
+void SVGDOCUMENT::RotateRight() {
+    rotateAngle += 5.0f;
 }

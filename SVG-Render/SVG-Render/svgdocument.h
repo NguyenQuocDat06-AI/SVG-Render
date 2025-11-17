@@ -14,13 +14,21 @@ using namespace std;
 class SVGDOCUMENT {
 private:
     vector<SVGSHAPE*> shapes;
+    float zoomFactor;
+	float rotateAngle;
     READSVG read;
 public:
+    SVGDOCUMENT();
     ~SVGDOCUMENT();
     void AddShape(SVGSHAPE* s);
-    void Render(Gdiplus::Graphics& g) const;
+    void Render(Gdiplus::Graphics& g, int windowWidth, int windowHeight) const;
     BYTE clamp255(int v);
     void ApplyCommonPaint(SVGSHAPE* shp, int i);
     void LoadSvgToDocument(const std::string& path);
+    void ZoomIn();
+	void ZoomOut();
+	void RotateLeft();
+	void RotateRight();
+
 };
 #endif // !SVGDOCUMENT_H

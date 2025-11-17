@@ -50,9 +50,39 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message,
     {
         hdc = BeginPaint(hWnd, &ps);
         Gdiplus::Graphics g(hdc);
-        g_doc.Render(g);
+		RECT rc;
+		GetClientRect(hWnd, &rc); // lấy kích thước cửa sổ
+        g_doc.Render(g,rc.right-rc.left,rc.bottom-rc.top);
         EndPaint(hWnd, &ps);
         return 0;
+    }
+    case WM_MOUSEWHEEL:
+    {
+		int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+        if (delta > 0) {
+            g_doc.ZoomIn();
+        }
+        else if (delta < 0) {
+            g_doc.ZoomOut();
+        }
+        InvalidateRect(hWnd, NULL, FALSE);
+        break;
+	}
+    case WM_KEYDOWN:
+    {
+        switch (wParam) {
+            case VK_LEFT:
+                g_doc.RotateLeft();
+                InvalidateRect(hWnd, NULL, FALSE);
+                break;
+            case VK_RIGHT:
+                g_doc.RotateRight();
+                InvalidateRect(hWnd, NULL, FALSE);
+                break;
+            default:
+                break;
+        }
+		break;
     }
     case WM_DESTROY:
         PostQuitMessage(0);
