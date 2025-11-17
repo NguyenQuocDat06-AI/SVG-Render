@@ -79,6 +79,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message,
                 g_doc.RotateRight();
                 InvalidateRect(hWnd, NULL, FALSE);
                 break;
+            case 'A':
+                g_doc.MoveLeft();
+                InvalidateRect(hWnd, NULL, FALSE);
+				break;
+            case 'D':
+                g_doc.MoveRight();
+				InvalidateRect(hWnd, NULL, FALSE);
+                break;
+            case 'W':
+				g_doc.MoveUp();
+				InvalidateRect(hWnd, NULL, FALSE);
+                break;
+			case 'S':
+				g_doc.MoveDown();
+                InvalidateRect(hWnd, NULL, FALSE);
+				break;
             default:
                 break;
         }

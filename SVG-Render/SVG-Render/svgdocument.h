@@ -16,6 +16,8 @@ private:
     vector<SVGSHAPE*> shapes;
     float zoomFactor;
 	float rotateAngle;
+	float translateX;
+    float translateY;
     READSVG read;
 public:
     SVGDOCUMENT();
@@ -29,6 +31,10 @@ public:
 	void ZoomOut();
 	void RotateLeft();
 	void RotateRight();
+	void MoveUp();
+	void MoveDown();
+	void MoveLeft();
+	void MoveRight();
 
 };
 #endif // !SVGDOCUMENT_H

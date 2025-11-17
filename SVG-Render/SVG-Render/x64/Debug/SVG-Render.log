@@ -1,2 +1,4 @@
-﻿  svgdocument.cpp
+﻿  main.cpp
+C:\Project\OOP_Ellipse_Circle\SVG-Render\SVG-Render\main.cpp(167,15): warning C4244: 'return': conversion from 'WPARAM' to 'int', possible loss of data
+C:\Project\OOP_Ellipse_Circle\SVG-Render\SVG-Render\main.cpp(109,1): warning C4715: 'WndProc': not all control paths return a value
   SVG-Render.vcxproj -> C:\Project\OOP_Ellipse_Circle\SVG-Render\x64\Debug\SVG-Render.exe

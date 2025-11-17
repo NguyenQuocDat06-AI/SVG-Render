@@ -1,5 +1,5 @@
 ﻿#include "svgdocument.h"
-SVGDOCUMENT::SVGDOCUMENT() : zoomFactor(1.0f), rotateAngle(0.0){}
+SVGDOCUMENT::SVGDOCUMENT() : zoomFactor(1.0f), rotateAngle(0.0f), translateX(0.0f), translateY(0.0f) {}
 SVGDOCUMENT::~SVGDOCUMENT() {
     for (auto s : shapes) delete s;
 }
@@ -9,11 +9,15 @@ void SVGDOCUMENT::AddShape(SVGSHAPE* s) {
 
 void SVGDOCUMENT::Render(Gdiplus::Graphics& g, int windowWidth, int windowHeight) const {
 	g.Clear(Gdiplus::Color(255, 255, 255, 255)); // nền trắng
+    //===Rotate===
 	float centerX = windowWidth / 2.0f;
 	float centerY = windowHeight / 2.0f;
 	g.TranslateTransform(centerX, centerY);
 	g.RotateTransform(rotateAngle);
 	g.TranslateTransform(-centerX, -centerY);
+	//===Translate===
+	g.TranslateTransform(translateX, translateY);
+	//===Zoom===
     g.ScaleTransform(zoomFactor, zoomFactor);
     for (auto s : shapes) {
         s->Draw(g);
@@ -156,4 +160,16 @@ void SVGDOCUMENT::RotateLeft() {
 }
 void SVGDOCUMENT::RotateRight() {
     rotateAngle += 5.0f;
+}
+void SVGDOCUMENT::MoveUp() {
+	translateY -= 10.0f;//Dịch chuyển lên 10 đơn vị (trục Y của GDI+ đi xuống)
+}
+void SVGDOCUMENT::MoveDown() {
+	translateY += 10.0f; //Dịch chuyển xuống 10 đơn vị
+}
+void SVGDOCUMENT::MoveLeft() {
+    translateX -= 10.0f; 
+}
+void SVGDOCUMENT::MoveRight() {
+    translateX += 10.0f; 
 }
