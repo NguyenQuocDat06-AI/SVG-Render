@@ -1,4 +1,6 @@
 ﻿#include"polyline.h"
+#include <algorithm>
+#include <cctype>
 SVGPOLYLINE::SVGPOLYLINE(const std::vector<PointF>& pts)
     : points(pts) {
 }
@@ -30,12 +32,36 @@ void SVGPOLYLINE::DrawImpl(Graphics& g, BYTE fillA, BYTE strokeA) const {
     }
 
     // === Stroke (nếu có) ===
-    if (hasStroke) {
+    if (hasStroke && strokeWidth > 0) {
         Color c(strokeA, strokeColor.GetR(), strokeColor.GetG(), strokeColor.GetB());
         Pen pen(c, strokeWidth);
-        pen.SetLineJoin(LineJoinRound);
-        pen.SetStartCap(LineCapRound);
-        pen.SetEndCap(LineCapRound);
+        pen.SetMiterLimit(strokeMiterLimit);
+        
+        // Áp dụng stroke-linejoin
+        std::string joinLower = strokeLinejoin;
+        for (auto& c : joinLower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (joinLower == "round") {
+            pen.SetLineJoin(LineJoinRound);
+        } else if (joinLower == "bevel") {
+            pen.SetLineJoin(LineJoinBevel);
+        } else {
+            pen.SetLineJoin(LineJoinMiter); // "miter"
+        }
+        
+        // Áp dụng stroke-linecap
+        std::string capLower = strokeLinecap;
+        for (auto& c : capLower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (capLower == "round") {
+            pen.SetStartCap(LineCapRound);
+            pen.SetEndCap(LineCapRound);
+        } else if (capLower == "square") {
+            pen.SetStartCap(LineCapSquare);
+            pen.SetEndCap(LineCapSquare);
+        } else {
+            pen.SetStartCap(LineCapFlat); // "butt"
+            pen.SetEndCap(LineCapFlat);
+        }
+        
         g.DrawLines(&pen, points.data(), static_cast<INT>(points.size()));
     }
 }

@@ -1,4 +1,6 @@
 ﻿#include "text.h"
+#include <algorithm>
+#include <cctype>
 static std::wstring Utf8ToWstring(const std::string& str) {
     if (str.empty()) return std::wstring();
 
@@ -12,8 +14,8 @@ static std::wstring Utf8ToWstring(const std::string& str) {
     return wstr;
 }
 
-SVGTEXT::SVGTEXT(float x, float y, const std::string& content)
-    : x(x), y(y), text(content),
+SVGTEXT::SVGTEXT(float x, float y,float dx,float dy,const std::string& content)
+    : x(x), y(y), dx(dx), dy(dy), text(content),
     fontFamily("Arial"), fontSize(16.0f),
     fontWeight("normal"), fontStyle("normal"),
     textAnchor("start") {
@@ -26,6 +28,7 @@ void SVGTEXT::SetText(const std::string& content) {
 void SVGTEXT::SetPosition(float x, float y) {
     this->x = x;
     this->y = y;
+
 }
 
 void SVGTEXT::SetFont(const std::string& family, float size) {
@@ -42,11 +45,10 @@ void SVGTEXT::SetAnchor(const std::string& anchor) {
     textAnchor = anchor;
 }
 
-void SVGTEXT::DrawImpl(Gdiplus::Graphics& g, BYTE fillA, BYTE strokeA) const {
-    using namespace Gdiplus;
+void SVGTEXT::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStrokeAlpha) const {
     if (text.empty()) return;
 
-    // --- 1) Chuẩn bị chuỗi & font ---
+    // --- 1) Chuẩn bị chuỗi & font (GIỮ NGUYÊN) ---
     std::wstring wText = Utf8ToWstring(text);
     std::wstring wFont = Utf8ToWstring(fontFamily);
 
@@ -57,69 +59,69 @@ void SVGTEXT::DrawImpl(Gdiplus::Graphics& g, BYTE fillA, BYTE strokeA) const {
     if (fontStyle == "italic") style |= FontStyleItalic;
     if (fontWeight == "bold")  style |= FontStyleBold;
 
-    // Baseline (SVG dùng baseline): y là baseline -> cần ascent(px)
     INT em = ff->GetEmHeight(style);
     INT asc = ff->GetCellAscent(style);
     float ascentPx = (em > 0) ? (fontSize * float(asc) / float(em)) : 0.0f;
 
-    // --- 2) Dựng path tại gốc (0,0) để đo chính xác ---
+    // --- 2) Tạo Path tại gốc (0,0) (GIỮ NGUYÊN) ---
     GraphicsPath path;
-    StringFormat fmt(
-        StringFormatFlagsNoClip
-        | StringFormatFlagsNoWrap
-        | StringFormatFlagsMeasureTrailingSpaces,
-        LANG_NEUTRAL
-    );
+    StringFormat fmt(StringFormatFlagsNoClip | StringFormatFlagsNoWrap | StringFormatFlagsMeasureTrailingSpaces, LANG_NEUTRAL);
+
     path.AddString(
-        wText.c_str(),
-        (INT)wText.size(),
-        ff,
-        style,
-        fontSize,                 // em-size (pixel)
-        PointF(0.0f, 0.0f),
-        &fmt
+        wText.c_str(), (INT)wText.size(),
+        ff, style, fontSize,
+        PointF(0.0f, 0.0f), &fmt
     );
 
-    // --- 3) Tính dịch theo text-anchor & baseline ---
-    RectF b; Matrix id;
-    path.GetBounds(&b, &id, nullptr);
+    // --- 3) Layout: Tính toán vị trí ---
+    RectF b;
+    path.GetBounds(&b, nullptr, nullptr);
 
-    float dx = 0.0f;
-    if (textAnchor == "middle") dx = b.Width * 0.5f;
-    else if (textAnchor == "end") dx = b.Width;
+    // [QUAN TRỌNG] Đổi tên biến 'dx' cũ thành 'anchorOffset' để không trùng với this->dx
+    float anchorOffset = 0.0f;
+    if (textAnchor == "middle") anchorOffset = b.Width * 0.5f;
+    else if (textAnchor == "end") anchorOffset = b.Width;
 
-    // Snap về nửa-pixel để AA của fill/stroke trùng nhau
     auto snap = [](float v) { return std::floor(v) + 0.5f; };
 
-    Matrix mtx;
-    mtx.Translate(
-        snap(x - (b.X + dx)),
-        snap((y - ascentPx) - b.Y)
+    // [CÔNG THỨC MỚI]
+    // Vị trí thực tế = (x + dx) - anchorOffset
+    // Vị trí dòng kẻ = (y + dy) - ascentPx
+    float finalX = x + dx;
+    float finalY = y + dy;
+
+    Matrix layoutMtx;
+    layoutMtx.Translate(
+        snap(finalX - anchorOffset),
+        snap(finalY - ascentPx)
     );
-    path.Transform(&mtx);
+    path.Transform(&layoutMtx);
 
-    // --- 4) Đồng bộ cấu hình raster cho cả fill & stroke ---
+    // --- Phần còn lại (Render) GIỮ NGUYÊN ---
     SmoothingMode oldSmooth = g.GetSmoothingMode();
-    PixelOffsetMode oldPix = g.GetPixelOffsetMode();
     g.SetSmoothingMode(SmoothingModeAntiAlias);
-    g.SetPixelOffsetMode(PixelOffsetModeHalf);
 
-    // --- 5) Vẽ ---
-    if (hasFill && fillA > 0) {
-        Color c(fillA, fillColor.GetR(), fillColor.GetG(), fillColor.GetB());
+    if (hasFill && finalFillAlpha > 0) {
+        Color c(finalFillAlpha, fillColor.GetR(), fillColor.GetG(), fillColor.GetB());
         SolidBrush br(c);
         g.FillPath(&br, &path);
     }
-    if (hasStroke && strokeA > 0 && strokeWidth > 0) {
-        Color c(strokeA, strokeColor.GetR(), strokeColor.GetG(), strokeColor.GetB());
+
+    if (hasStroke && finalStrokeAlpha > 0 && strokeWidth > 0) {
+        Color c(finalStrokeAlpha, strokeColor.GetR(), strokeColor.GetG(), strokeColor.GetB());
         Pen pen(c, strokeWidth);
-        pen.SetAlignment(PenAlignmentCenter); // mặc định, giữ stroke cân
-        pen.SetLineJoin(LineJoinRound);       // hạn chế răng cưa ở góc
-        pen.SetMiterLimit(4.0f);
+        pen.SetAlignment(PenAlignmentCenter);
+        pen.SetMiterLimit(strokeMiterLimit);
+
+        // ... (Code xử lý linejoin cũ giữ nguyên) ...
+        std::string joinLower = strokeLinejoin;
+        for (auto& ch : joinLower) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        if (joinLower == "round") pen.SetLineJoin(LineJoinRound);
+        else if (joinLower == "bevel") pen.SetLineJoin(LineJoinBevel);
+        else pen.SetLineJoin(LineJoinMiter);
+
         g.DrawPath(&pen, &path);
     }
 
-    // --- 6) Khôi phục ---
-    g.SetPixelOffsetMode(oldPix);
     g.SetSmoothingMode(oldSmooth);
 }

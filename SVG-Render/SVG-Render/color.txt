@@ -223,6 +223,8 @@ reddy brown	#6e1005
 blush pink	#fe828c	
 camouflage green	#4b6113	
 lawn green	#4da409	
+midnightblue	#191970
+blueviolet	#8A2BE2
 putty	#beae8a	
 vibrant blue	#0339f8	
 dark sand	#a88f59	
@@ -934,7 +936,6 @@ violet	#9a0eea
 light purple	#bf77f6	
 lime green	#89fe05	
 grey	#929591	
-sky blue	#75bbfd	
 yellow	#ffff14	
 magenta	#c20078	
 light green	#96f97b	
@@ -949,4 +950,4 @@ green	#15b01a
 purple	#7e1e9c	
 dark slate gray #2f4f4f
 CYAN #00FFFF
-sky blue #87CEEB
+skyblue	#87CEEB

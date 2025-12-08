@@ -5,6 +5,8 @@ class SVGTEXT : public SVGSHAPE {
 protected:
     float x;
     float y;
+    float dx;
+    float dy;
     std::string text;
     std::string fontFamily;
     float fontSize;
@@ -13,7 +15,7 @@ protected:
     std::string textAnchor; // "start", "middle", "end"
 
 public:
-    SVGTEXT(float x, float y, const std::string& content);
+    SVGTEXT(float x, float y, float dx, float dy, const std::string& content);
 
     void SetText(const std::string& content);
     void SetPosition(float x, float y);

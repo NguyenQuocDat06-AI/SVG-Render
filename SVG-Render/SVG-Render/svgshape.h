@@ -33,6 +33,11 @@ protected:
     bool hasTransform;
     Gdiplus::Matrix transform;
 
+    float strokeMiterLimit = 4.0f;     // Mặc định SVG là 4
+    std::string fillRule = "nonzero";  // Mặc định SVG là nonzero
+    std::string strokeLinecap = "butt";  // "butt" | "round" | "square"
+    std::string strokeLinejoin = "miter"; // "miter" | "round" | "bevel"
+
 public:
     SVGSHAPE();
     virtual ~SVGSHAPE() {}
@@ -47,15 +52,21 @@ public:
     void DisableStroke();
     void SetStrokeOpacity(float op);
     void SetStrokeWidth(float w);
+    // ------------- advanced stroke / fill options -------------
+    void SetStrokeMiterLimit(float m);
+    void SetFillRule(const std::string& rule);
+    void SetStrokeLinecap(const std::string& cap);
+    void SetStrokeLinejoin(const std::string& join);
     // ------------- overall opacity -------------
     void SetOverallOpacity(float op);
+    // ------------- transform -------------
+    void SetTransform(const Gdiplus::Matrix& mtx);
     // ------------- Render wrapper -------------
     // Quan trọng:
     //  - Tính alpha cuối cho fill/stroke dựa trên fill-opacity,
     //    stroke-opacity và overall opacity
     //  - Apply transform nếu có
     void Draw(Gdiplus::Graphics& g) const;
-
     // Hàm thực sự vẽ shape -> lớp con phải override
     // finalFillAlpha / finalStrokeAlpha là alpha đã trộn opacity
 

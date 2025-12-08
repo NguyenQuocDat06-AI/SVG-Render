@@ -48,6 +48,9 @@
     <ClCompile Include="polyline.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="path.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="readsvg.h">
@@ -80,9 +83,63 @@
     <ClInclude Include="polyline.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="path.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="sample.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="svg-02.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="svg-01.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="svg-03.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="svg-05.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="svg-04.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="svg-06.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="svg-07.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="svg-08.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="svg-10.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="svg-11.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="svg-12.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="svg-13.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="svg-14.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="svg-15.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="svg-16.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="svg-17.svg">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="svg-18.svg">
       <Filter>Resource Files</Filter>
     </None>
   </ItemGroup>

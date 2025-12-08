@@ -1,43 +1,9 @@
 ﻿#include "readsvg.h"
 #include "svgdocument.h"
 using namespace Gdiplus;
-// ============================================================================
-// DEBUG MAIN // PROJECT -> LINKER -> SUBSYSTEM -> Console (/SUBSYSTEM:CONSOLE)
-// ============================================================================
 
-//int main() {
-//	READSVG _svg;
-//	_svg.ParseFromBuffer("sample.svg");
-//	_svg.PrintNode();
-//	vector<int> rgb(_svg.GetFill(1));
-//	cout << endl;
-//	for (int c : rgb) {
-//		cout << c << " ";
-//	}
-//	cout << endl;
-//	float op = _svg.GetFillOpacity(0);
-//	cout << op << endl;
-//	float h = _svg.GetHeight(0);
-//	cout << h << endl;
-//	rgb = _svg.GetStroke(2);
-//	for (int c : rgb) {
-//		cout << c << " ";
-//	}
-//}
-// ============================================================================
-// Global PROJECT -> LINKER -> SUBSYSTEM -> Windows (/SUBSYSTEM:WINDOWS)
-// ============================================================================
 ULONG_PTR g_GdiToken;
-SVGDOCUMENT g_doc;
-// ===== helper nhỏ =====
-
-// tìm trong style="...": prop có dạng "fill:" / "stroke:"
-
-// ===== hàm chính: đọc file & bơm shape vào g_doc =====
-
-// ============================================================================
-// WndProc
-// ============================================================================
+SVGDOCUMENT* g_doc = nullptr;
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message,
     WPARAM wParam, LPARAM lParam)
 {
@@ -50,7 +16,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message,
     {
         hdc = BeginPaint(hWnd, &ps);
         Gdiplus::Graphics g(hdc);
-        g_doc.Render(g);
+        if (g_doc) {      
+            RECT rect;
+            GetClientRect(hWnd, &rect);
+            int width = rect.right - rect.left;
+            int height = rect.bottom - rect.top;
+
+            // Gọi hàm Render mới
+            g_doc->Render(g, width, height);
+        }
         EndPaint(hWnd, &ps);
         return 0;
     }
@@ -60,27 +34,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message,
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);
     }
-} // WndProc
+} 
 
-// ============================================================================
-// WinMain
-// ============================================================================
+
 INT WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, PSTR, INT iCmdShow)
 {
-    // ============================================================================
-    // CODE ... rect, text, circle, polyline, ellipse, line, polygon 
-   
-    //
-    g_doc.LoadSvgToDocument("sample.svg");
-    // g_doc.AddShape(...);
-    // ============================================================================
+    GdiplusStartupInput gdiplusStartupInput;
+    ULONG_PTR           gdiplusToken;
+    GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
+    g_doc = new SVGDOCUMENT();
+    g_doc->LoadSvgToDocument("svg-18.svg");
+
     HWND                hWnd;
     MSG                 msg;
     WNDCLASS            wndClass;
-    GdiplusStartupInput gdiplusStartupInput;
-    ULONG_PTR           gdiplusToken;
-    // Initialize GDI+.
-    GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 
     wndClass.style = CS_HREDRAW | CS_VREDRAW;
     wndClass.lpfnWndProc = WndProc;
@@ -107,14 +75,21 @@ INT WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, PSTR, INT iCmdShow)
         NULL,                     // window menu handle
         hInstance,                // program instance handle
         NULL);                    // creation parameters
-
+    
     ShowWindow(hWnd, iCmdShow);
     UpdateWindow(hWnd);
 
+    
+    
     while (GetMessage(&msg, NULL, 0, 0))
     {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
+    }
+
+    if (g_doc) {
+        delete g_doc;
+        g_doc = nullptr;
     }
 
     GdiplusShutdown(gdiplusToken);

@@ -7,6 +7,8 @@
 #include <cctype>
 #include <algorithm>
 #include <cmath>
+#include <sstream>
+#include <cstring>
 
 #include "readsvg.h"
 namespace {
@@ -51,6 +53,9 @@ namespace {
     }
 }
 
+// Khai báo trước để dùng trong TraverseNode
+static std::map<std::string, std::string> _parseStyleKV(const std::string& style);
+
 READSVG::READSVG() {};
 READSVG::~READSVG() {};
 vector<char> READSVG::ReadFileToBuffer(const string& path) {
@@ -69,6 +74,96 @@ vector<char> READSVG::ReadFileToBuffer(const string& path) {
     buffer.push_back('\0');
     return buffer;
 }
+
+// Duyệt đệ quy một node và toàn bộ con của nó, lưu vào _node
+void READSVG::TraverseNode(xml_node<>* node, int parentIndex, int depth) {
+    if (!node) return;
+
+    // Chỉ quan tâm node dạng element (bỏ qua text/comment)
+    if (node->type() == node_element) {
+        map<string, string> _temp;
+        for (xml_attribute<>* attr = node->first_attribute(); attr; attr = attr->next_attribute()) {
+            _temp[attr->name()] = attr->value();
+        }
+        // Lấy text content cho <text> từ node con kiểu node_data
+        std::string textValue;
+        if (std::strcmp(node->name(), "text") == 0) {
+            if (xml_node<>* t = node->first_node()) {
+                if (t->type() == node_data && t->value()) {
+                    textValue = t->value();
+                }
+            }
+        }
+        else {
+            textValue = node->value() ? node->value() : "";
+        }
+        int currentIndex = (int)_node.size();
+        ATTRIBUTE attrNode{ node->name(), textValue, _temp, parentIndex, depth };
+        _node.push_back(attrNode);
+
+        // Duyệt các con với parentIndex = currentIndex
+        for (xml_node<>* child = node->first_node(); child; child = child->next_sibling()) {
+            TraverseNode(child, currentIndex, depth + 1);
+        }
+
+        // Nếu là linearGradient thì parse vào bảng gradient riêng
+        if (attrNode._tags == "linearGradient") {
+            auto itId = attrNode._att.find("id");
+            if (itId != attrNode._att.end()) {
+                std::string id = itId->second;
+                LinearGradientDef def;
+                def.x1 = ParseFloat(attrNode._att["x1"], 0.0f);
+                def.y1 = ParseFloat(attrNode._att["y1"], 0.0f);
+                def.x2 = ParseFloat(attrNode._att["x2"], def.x1);
+                def.y2 = ParseFloat(attrNode._att["y2"], def.y1);
+
+                // Duyệt các stop
+                for (xml_node<>* s = node->first_node("stop"); s; s = s->next_sibling("stop")) {
+                    std::map<std::string, std::string> stopAtt;
+                    for (xml_attribute<>* a = s->first_attribute(); a; a = a->next_attribute()) {
+                        stopAtt[a->name()] = a->value();
+                    }
+                    std::string offStr;
+                    auto itOff = stopAtt.find("offset");
+                    if (itOff != stopAtt.end()) offStr = itOff->second;
+                    float off = 0.0f;
+                    if (!offStr.empty()) {
+                        // offset có thể là "0.5" hoặc "50%"
+                        if (offStr.back() == '%') {
+                            off = ParseFloat(offStr.substr(0, offStr.size() - 1), 0.0f) / 100.0f;
+                        }
+                        else {
+                            off = ParseFloat(offStr, 0.0f);
+                        }
+                    }
+                    // màu: ưu tiên stop-color, nếu không có thì tìm trong style
+                    std::string colorStr;
+                    auto itCol = stopAtt.find("stop-color");
+                    if (itCol != stopAtt.end()) {
+                        colorStr = itCol->second;
+                    }
+                    else {
+                        auto itStyle = stopAtt.find("style");
+                        if (itStyle != stopAtt.end()) {
+                            // style="stop-color:#FFC746;stop-opacity:1"
+                            std::map<std::string, std::string> kv = _parseStyleKV(itStyle->second);
+                            std::map<std::string, std::string>::const_iterator it2 = kv.find("stop-color");
+                            if (it2 != kv.end()) {
+                                colorStr = it2->second;
+                            }
+                        }
+                    }
+                    auto rgb = ParseColor(colorStr); // có thể rỗng
+                    if (!rgb.empty()) {
+                        def.offsets.push_back(off);
+                        def.colors.push_back(rgb);
+                    }
+                }
+                _linearGradients[id] = def;
+            }
+        }
+    }
+}
 void READSVG::ParseFromBuffer(const string& _path) {
     vector <char> xml(ReadFileToBuffer(_path));
     xml_document<> doc;
@@ -78,27 +173,10 @@ void READSVG::ParseFromBuffer(const string& _path) {
     if (!root) {
         throw runtime_error("Khong tim thay the <svg> o root");
     }
-    // 4) Đọc một số thuộc tính thường gặp
-    //const char* w = root->first_attribute("width") ? root->first_attribute("width")->value() : "(none)";
-    //const char* h = root->first_attribute("height") ? root->first_attribute("height")->value() : "(none)";
-    //cout << "SVG width = " << w << ", height = " << h << "\n";
-    // 5) Duyet cac node con (rect, circle, line, path, ...)
-    for (xml_node<>* node = root->first_node(); node; node = node->next_sibling()) {
-        map<string, string> _temp;
-        for (xml_attribute<>* attr = node->first_attribute(); attr; attr = attr->next_attribute()) {
-            _temp[attr->name()] = attr->value();
-        }
-        _node.push_back(ATTRIBUTE{ node->name(), node->value(), _temp });
-    }
-}
-void READSVG::PrintNode() {
-    int _size = _node.size();
-    for (int i = 0; i < _size; i++) {
-        cout << "TAGS: " << _node[i]._tags << " TEXT: " << _node[i]._text << endl;
-        for (auto it : _node[i]._att) {
-            cout << it.first << " " << it.second << endl;
-        }
-    }
+
+    // 4) Duyệt đệ quy toàn bộ cây (svg, g, defs, path, rect, ...)
+    _node.clear();
+    TraverseNode(root, -1, 0);
 }
 static std::map<std::string, std::string> LoadColorMap(const std::string& path) {
     std::ifstream fin(path);
@@ -153,14 +231,19 @@ std::vector<int> READSVG::getColor(const std::string& raw) {
         return rgb;
     }
 
-    // 5) rgb(r,g,b)
+    // 5) rgb(r,g,b) hoặc rgb(r, g, b) – parse linh hoạt khoảng trắng
     if (s.rfind("rgb(", 0) == 0 && s.back() == ')') {
-        std::string t = s.substr(4, s.size() - 5);
+        std::string t = s.substr(4, s.size() - 5); // bên trong ngoặc
+        // thay dấu phẩy thành khoảng trắng rồi dùng stringstream
+        for (char& c : t) {
+            if (c == ',') c = ' ';
+        }
         int r = 0, g = 0, b = 0;
-        // dùng sscanf_s hoặc stringstream đều được
-        sscanf_s(t.c_str(), "%d , %d , %d", &r, &g, &b);
-        rgb = { clamp255i(r), clamp255i(g), clamp255i(b) };
-        return rgb;
+        std::stringstream ss(t);
+        if (ss >> r >> g >> b) {
+            rgb = { clamp255i(r), clamp255i(g), clamp255i(b) };
+            return rgb;
+        }
     }
 
     // 6) Không parse được -> xem như không có màu
@@ -173,15 +256,9 @@ ATTRIBUTE READSVG::GetNode(int index) {
     return _node[index];
 }
 std::vector<int> READSVG::GetFill(int index) {
-    const auto& n = _node[index];
-    std::string v = findInStyle(n, "fill:");
-    if (v.empty()) v = getAttr(n, "fill");
-    return getColor(v); // rỗng => không fill
-}
-float READSVG::GetFillOpacity(int index) {
-    string str = _node[index]._att["fill-opacity"];
-    if (str.empty()) return 1.0f; // Mặc định là 1.0 nếu không có thuộc tính
-    return stof(str);
+    // Thay vì chỉ tìm ở node hiện tại, hãy tìm ngược lên cha
+    std::string v = GetInheritedAttribute(index, "fill");
+    return getColor(v);
 }
 float READSVG::GetHeight(int index) {
     string str = _node[index]._att["height"];
@@ -194,20 +271,23 @@ float READSVG::GetWidth(int index) {
     return stof(str);
 }
 std::vector<int> READSVG::GetStroke(int index) {
-    const auto& n = _node[index];
-    std::string v = findInStyle(n, "stroke:");
-    if (v.empty()) v = getAttr(n, "stroke");
-    return getColor(v); // rỗng => không stroke
-}
-float READSVG::GetStrokeOpacity(int index) {
-    string str = _node[index]._att["stroke-opacity"];
-    if (str.empty()) return 1.0f; // Mặc định là 1.0 nếu không có thuộc tính
-    return stof(str);
+    std::string v = GetInheritedAttribute(index, "stroke");
+    return getColor(v);
 }
 float READSVG::GetStrokeWidth(int index) {
-    string str = _node[index]._att["stroke-width"];
-    if (str.empty()) return 1.0f; // Mặc định là 1.0 nếu không có thuộc tính
-    return stof(str);
+    // Stroke-width cũng kế thừa
+    std::string v = GetInheritedAttribute(index, "stroke-width");
+    return ParseFloat(v, 1.0f); // Mặc định 1.0 nếu tìm mãi không thấy
+}
+float READSVG::GetStrokeOpacity(int index) {
+    // Lấy thuộc tính stroke-opacity (có kế thừa từ cha)
+    std::string v = GetInheritedAttribute(index, "stroke-opacity");
+    // ParseOpacity đã có sẵn trong code của bạn (trả về 1.0f nếu rỗng)
+    return ParseOpacity(v, 1.0f);
+}
+float READSVG::GetFillOpacity(int index) {
+    std::string v = GetInheritedAttribute(index, "fill-opacity");
+    return ParseOpacity(v, 1.0f);
 }
 float READSVG::GetX(int index) {
     string str = _node[index]._att["x"];
@@ -391,69 +471,109 @@ static void _matMul(float M[6], const float T[6]) {
     M[0] = a; M[1] = b; M[2] = c; M[3] = d; M[4] = e; M[5] = f;
 }
 
-std::vector<float> READSVG::ParseTransformMatrix(const std::string& s) {
+std::vector<TransformOperation> READSVG::ParseTransformOperations(const std::string& s) {
+    std::vector<TransformOperation> operations;
     std::string t = _trim(s);
-    if (t.empty()) return {};
-    float M[6] = { 1,0,0,1, 0,0 };
+    if (t.empty()) return operations;
+
     size_t i = 0, n = t.size();
     auto isAlpha = [&](char c) { return std::isalpha((unsigned char)c) != 0; };
+
     while (i < n) {
+        // 1. Bỏ qua khoảng trắng đầu
         while (i < n && std::isspace((unsigned char)t[i])) ++i;
         if (i >= n) break;
+
+        // =========================================================
+        // [FIX QUAN TRỌNG] Bỏ qua dấu phẩy (nếu có) giữa các lệnh
+        // =========================================================
+        if (t[i] == ',') {
+            ++i; // Nhảy qua dấu phẩy
+            // Bỏ qua tiếp khoảng trắng sau dấu phẩy (nếu có)
+            while (i < n && std::isspace((unsigned char)t[i])) ++i;
+            if (i >= n) break;
+        }
+
+        // 2. Đọc tên hàm (translate, rotate...)
         size_t j = i;
-        while (j < n&& isAlpha(t[j])) ++j;
+        while (j < n && isAlpha(t[j])) ++j;
+
+        // Nếu j == i nghĩa là không đọc được chữ nào -> Gặp ký tự lạ -> Skip để tránh lặp vô tận
+        if (j == i) {
+            ++i; continue;
+        }
+
         std::string fn = t.substr(i, j - i);
-        while (j < n&& std::isspace((unsigned char)t[j])) ++j;
+
+        // Bỏ qua khoảng trắng trước dấu '('
+        while (j < n && std::isspace((unsigned char)t[j])) ++j;
+
+        // Kiểm tra dấu mở ngoặc
         if (j >= n || t[j] != '(') break;
-        ++j; // '('
+        ++j; // Nhảy qua '('
+
+        // 3. Tìm dấu đóng ngoặc ')' tương ứng
         size_t k = j; int paren = 1;
-        while (k < n && paren>0) { if (t[k] == '(') ++paren; else if (t[k] == ')') --paren; ++k; }
-        if (paren != 0) break;
+        while (k < n && paren > 0) {
+            if (t[k] == '(') ++paren;
+            else if (t[k] == ')') --paren;
+            ++k;
+        }
+        if (paren != 0) break; // Lỗi ngoặc không cân bằng
+
         std::string args = t.substr(j, (k - 1) - j);
-        i = k;
+        i = k; // Cập nhật vị trí i để chuẩn bị cho vòng lặp sau
 
+        // 4. Parse tham số bên trong và tạo Operation
         auto vals = _splitFloatList(args);
-        float Tm[6] = { 1,0,0,1, 0,0 };
+        TransformOperation op;
+        std::memset(op.values, 0, sizeof(op.values));
 
+        // ... (Phần logic switch/case của bạn GIỮ NGUYÊN) ...
         if (_ieq(fn, "matrix") && vals.size() >= 6) {
-            Tm[0] = vals[0]; Tm[1] = vals[1];
-            Tm[2] = vals[2]; Tm[3] = vals[3];
-            Tm[4] = vals[4]; Tm[5] = vals[5];
+            op.type = TransformType::Matrix;
+            op.values[0] = vals[0]; op.values[1] = vals[1];
+            op.values[2] = vals[2]; op.values[3] = vals[3];
+            op.values[4] = vals[4]; op.values[5] = vals[5];
+            operations.push_back(op);
         }
         else if (_ieq(fn, "translate")) {
-            float tx = vals.size() > 0 ? vals[0] : 0.f;
-            float ty = vals.size() > 1 ? vals[1] : 0.f;
-            Tm[4] = tx; Tm[5] = ty;
+            op.type = TransformType::Translate;
+            op.values[0] = vals.size() > 0 ? vals[0] : 0.f;
+            op.values[1] = vals.size() > 1 ? vals[1] : 0.f;
+            operations.push_back(op);
         }
         else if (_ieq(fn, "scale")) {
-            float sx = vals.size() > 0 ? vals[0] : 1.f;
-            float sy = vals.size() > 1 ? vals[1] : sx;
-            Tm[0] = sx; Tm[3] = sy;
+            op.type = TransformType::Scale;
+            // Scale(x) tương đương Scale(x, x)
+            op.values[0] = vals.size() > 0 ? vals[0] : 1.f;
+            op.values[1] = vals.size() > 1 ? vals[1] : op.values[0];
+            operations.push_back(op);
         }
         else if (_ieq(fn, "rotate")) {
-            float a = vals.size() > 0 ? vals[0] : 0.f; // độ
-            float rad = a * 3.14159265358979323846f / 180.f;
-            float ca = std::cos(rad), sa = std::sin(rad);
-            Tm[0] = ca; Tm[1] = sa; Tm[2] = -sa; Tm[3] = ca;
+            op.values[0] = vals.size() > 0 ? vals[0] : 0.f;
+            if (vals.size() >= 3) {
+                op.type = TransformType::RotateAt;
+                op.values[1] = vals[1]; op.values[2] = vals[2];
+            }
+            else {
+                op.type = TransformType::Rotate;
+            }
+            operations.push_back(op);
         }
         else if (_ieq(fn, "skewX")) {
-            float a = vals.size() > 0 ? vals[0] : 0.f;
-            float rad = a * 3.14159265358979323846f / 180.f;
-            Tm[2] = std::tan(rad);
+            op.type = TransformType::SkewX;
+            op.values[0] = vals.size() > 0 ? vals[0] : 0.f;
+            operations.push_back(op);
         }
         else if (_ieq(fn, "skewY")) {
-            float a = vals.size() > 0 ? vals[0] : 0.f;
-            float rad = a * 3.14159265358979323846f / 180.f;
-            Tm[1] = std::tan(rad);
+            op.type = TransformType::SkewY;
+            op.values[0] = vals.size() > 0 ? vals[0] : 0.f;
+            operations.push_back(op);
         }
-        else {
-            continue;
-        }
-        _matMul(M, Tm);
     }
-    return { M[0],M[1],M[2],M[3],M[4],M[5] };
+    return operations;
 }
-
 // ---------- các getter còn thiếu theo header ----------
 
 std::string READSVG::GetTagName(int index) {
@@ -474,7 +594,7 @@ std::string READSVG::GetAttributeRaw(int index, const std::string& key, const st
 
 // fill/stroke nâng cao
 std::string READSVG::GetFillRule(int index) {
-    auto v = _getAttrWithStyle(_node[index], "fill-rule");
+    std::string v = GetInheritedAttribute(index, "fill-rule");
     return v.empty() ? "nonzero" : v;
 }
 std::string READSVG::GetStrokeLinecap(int index) {
@@ -482,11 +602,11 @@ std::string READSVG::GetStrokeLinecap(int index) {
     return v.empty() ? "butt" : v;
 }
 std::string READSVG::GetStrokeLinejoin(int index) {
-    auto v = _getAttrWithStyle(_node[index], "stroke-linejoin");
+    std::string v = GetInheritedAttribute(index, "stroke-linejoin");
     return v.empty() ? "miter" : v;
 }
 float READSVG::GetStrokeMiterlimit(int index) {
-    auto v = _getAttrWithStyle(_node[index], "stroke-miterlimit");
+    std::string v = GetInheritedAttribute(index, "stroke-miterlimit");
     return ParseFloat(v, 4.0f);
 }
 std::vector<float> READSVG::GetStrokeDasharray(int index) {
@@ -519,9 +639,11 @@ bool READSVG::HasTransform(int index) {
     auto v = _getAttrWithStyle(_node[index], "transform");
     return !_trim(v).empty();
 }
-std::vector<float> READSVG::GetTransformMatrix(int index) {
+
+
+std::vector<TransformOperation> READSVG::GetTransformOperations(int index) {
     auto v = _getAttrWithStyle(_node[index], "transform");
-    return ParseTransformMatrix(v);
+    return ParseTransformOperations(v);
 }
 
 // id/class/style
@@ -542,11 +664,11 @@ std::string READSVG::GetStyle(int index) {
 }
 
 // canvas-level
-bool READSVG::HasViewBox(int index) {
+bool READSVG::HasViewBox(int index) const {
     auto it = _node[index]._att.find("viewBox");
     return it != _node[index]._att.end() && !_trim(it->second).empty();
 }
-std::tuple<float, float, float, float> READSVG::GetViewBox(int index) {
+std::tuple<float, float, float, float> READSVG::GetViewBox(int index) const  {
     float x = 0, y = 0, w = 0, h = 0;
     auto it = _node[index]._att.find("viewBox");
     if (it != _node[index]._att.end()) {
@@ -592,15 +714,15 @@ float READSVG::GetImageHeight(int index) { return ParseFloat(_getAttrWithStyle(_
 
 // text/font
 std::string READSVG::GetFontFamily(int index) {
-    auto v = _getAttrWithStyle(_node[index], "font-family");
-    return v.empty() ? "Times New Roman" : v;
+    std::string v = GetInheritedAttribute(index, "font-family");
+    return v.empty() ? "Times New Roman" : v; // Default font
 }
 float READSVG::GetFontSize(int index) {
-    auto v = _getAttrWithStyle(_node[index], "font-size");
-    return ParseFloat(v, 16.0f);
+    std::string v = GetInheritedAttribute(index, "font-size");
+    return ParseFloat(v, 16.0f); // Default size
 }
 std::string READSVG::GetFontWeight(int index) {
-    auto v = _getAttrWithStyle(_node[index], "font-weight");
+    std::string v = GetInheritedAttribute(index, "font-weight");
     return v.empty() ? "normal" : v;
 }
 std::string READSVG::GetFontStyle(int index) {
@@ -608,7 +730,7 @@ std::string READSVG::GetFontStyle(int index) {
     return v.empty() ? "normal" : v;
 }
 std::string READSVG::GetTextAnchor(int index) {
-    auto v = _getAttrWithStyle(_node[index], "text-anchor");
+    std::string v = GetInheritedAttribute(index, "text-anchor");
     return v.empty() ? "start" : v;
 }
 std::string READSVG::GetDominantBaseline(int index) {
@@ -624,6 +746,14 @@ float READSVG::GetWordSpacing(int index) {
     return ParseFloat(v, 0.f);
 }
 
+float READSVG::GetDx(int index) {
+    // dx có thể nằm trong style hoặc attribute
+    return ParseFloat(_getAttrWithStyle(_node[index], "dx"), 0.0f);
+}
+
+float READSVG::GetDy(int index) {
+    return ParseFloat(_getAttrWithStyle(_node[index], "dy"), 0.0f);
+}
 // Tiện ích
 std::pair<float, float> READSVG::GetSize(int index) {
     const auto& tag = _node[index]._tags;
@@ -667,4 +797,57 @@ bool READSVG::IsFillNone(int i) {
     // so sánh lower-case
     for (auto& c : v) c = (char)tolower((unsigned char)c);
     return v == "none";
+}
+
+bool READSVG::TryGetLinearGradient(const std::string& id, LinearGradientDef& out) const {
+    auto it = _linearGradients.find(id);
+    if (it == _linearGradients.end()) return false;
+    out = it->second;
+    return true;
+}
+
+std::vector<TransformOperation> READSVG::GetAccumulatedTransformOperations(int index) const {
+    std::vector<TransformOperation> operations;
+    int current = index;
+    while (current >= 0) {
+        const auto& node = _node[current];
+        if (node._tags == "g" || node._tags == "svg") {
+            std::string transformStr = _getAttrWithStyle(node, "transform");
+            auto ops = ParseTransformOperations(transformStr);
+            // Thêm vào đầu danh sách (cha trước, con sau)
+            operations.insert(operations.begin(), ops.begin(), ops.end());
+        }
+        current = node._parentIndex;
+    }
+    return operations;
+}
+
+std::string READSVG::GetInheritedAttribute(int index, const std::string& key) const {
+    int current = index;
+    while (current >= 0) {
+        const auto& node = _node[current];
+        auto it = node._att.find(key);
+        if (it != node._att.end() && !it->second.empty()) {
+            return it->second;
+        }
+        // Kiểm tra trong style
+        auto itStyle = node._att.find("style");
+        if (itStyle != node._att.end()) {
+            auto kv = _parseStyleKV(itStyle->second);
+            auto itKV = kv.find(key);
+            if (itKV != kv.end() && !itKV->second.empty()) {
+                return itKV->second;
+            }
+        }
+        current = node._parentIndex;
+    }
+    return "";
+}
+
+float READSVG::ParseFloatPublic(const std::string& s, float def) const {
+    return ParseFloat(s, def);
+}
+
+std::vector<int> READSVG::ParseColorPublic(const std::string& s) const {
+    return ParseColor(s);
 }
