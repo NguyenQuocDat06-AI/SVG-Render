@@ -213,7 +213,7 @@ void SVGDOCUMENT::LoadSvgToDocument(const std::string& path) {
 
             auto* s = new SVGRECT(x, y, w, h, rx, ry);
             ApplyCommonPaint(s, i);
-            ApplyTransformToShape(s, i,x,y);
+            ApplyTransformToShape(s, i);
             AddShape(s);
         }
         else if (tag == "circle") {
@@ -302,7 +302,7 @@ void SVGDOCUMENT::LoadSvgToDocument(const std::string& path) {
             ApplyCommonPaint(s, i);
 
             // Áp dụng transform (từ cha và của chính text)
-            ApplyTransformToShape(s, i,x,y);
+            ApplyTransformToShape(s, i);
 
             AddShape(s);
         }
@@ -345,6 +345,6 @@ void SVGDOCUMENT::LoadSvgToDocument(const std::string& path) {
             ApplyTransformToShape(s, i);
             AddShape(s);
         }
-        // các tag khác (defs, g, use, image, ...) tùy bạn bổ sung dần
+
     }
 }

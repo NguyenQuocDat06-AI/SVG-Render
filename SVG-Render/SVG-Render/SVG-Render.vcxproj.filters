@@ -142,6 +142,9 @@
     <None Include="svg-18.svg">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="hcmus.svg">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Text Include="color.txt">

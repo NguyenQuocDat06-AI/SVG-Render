@@ -150,6 +150,7 @@
     <ClInclude Include="text.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="hcmus.svg" />
     <None Include="sample.svg" />
     <None Include="svg-01.svg" />
     <None Include="svg-02.svg" />

@@ -1,15 +1,58 @@
-﻿#include <sstream>
+﻿#include "path.h"
+#include <sstream>
 #include <vector>
 #include <string>
 #include <algorithm>
 #include <cctype>
-#include "path.h"
-// Nhớ include header của class SVGPATH và GDI+
+#include <cmath>
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+// =========================================================
+// CÁC HÀM HELPER BỔ TRỢ
+// =========================================================
 
-// Hàm hỗ trợ xử lý chuỗi (chuyển dấu phẩy thành khoảng trắng)
+// Kiểm tra ký tự phân tách (dấu phẩy hoặc khoảng trắng)
+inline bool IsSeparator(char c) {
+    return (c == ',' || std::isspace(static_cast<unsigned char>(c)));
+}
 
-SVGPATH::SVGPATH(string d)
-    : d(d) {
+// Đọc số thực từ stream, xử lý trường hợp dính liền (vd: 10-20)
+bool ReadFloat(std::stringstream& ss, float& outVal) {
+    // Bỏ qua separator
+    while (ss.good() && IsSeparator(ss.peek())) {
+        ss.get();
+    }
+    if (ss.eof()) return false;
+
+    // Kiểm tra ký tự đầu tiên của số
+    char next = ss.peek();
+    if (!isdigit(static_cast<unsigned char>(next)) && next != '-' && next != '+' && next != '.') {
+        return false;
+    }
+
+    ss >> outVal;
+    return !ss.fail();
+}
+
+// Tính điểm đối xứng của p qua center (Dùng cho lệnh S/s)
+Gdiplus::PointF Reflect(const Gdiplus::PointF& p, const Gdiplus::PointF& center) {
+    return Gdiplus::PointF(2 * center.X - p.X, 2 * center.Y - p.Y);
+}
+
+// Hàm format chuỗi cũ (giữ lại nếu cần, nhưng ReadFloat đã xử lý tốt hơn)
+std::string FormatPathString(std::string str) {
+    for (char& c : str) {
+        if (c == ',') c = ' ';
+    }
+    return str;
+}
+
+// =========================================================
+// SVGPATH CLASS IMPLEMENTATION
+// =========================================================
+
+SVGPATH::SVGPATH(std::string d) : d(d) {
 }
 
 void SVGPATH::SetLinearGradient(const Gdiplus::PointF& p1, const Gdiplus::PointF& p2,
@@ -28,34 +71,140 @@ void SVGPATH::SetLinearGradient(const Gdiplus::PointF& p1, const Gdiplus::PointF
     gOffsets = offsets;
 }
 
-// Hàm helper để thay thế dấu phẩy bằng khoảng trắng (nếu bạn chưa có)
-std::string FormatPathString(std::string str) {
-    for (char &c : str) {
-        if (c == ',') c = ' ';
-    }
-    return str;
-}
 
-inline bool IsSeparator(char c) {
-    return (c == ',' || std::isspace(static_cast<unsigned char>(c)));
-}
 
-// Helper: Đọc 1 số thực từ stringstream, xử lý cả trường hợp dính liền (vd: 12-34 -> 12, -34)
-bool ReadFloat(std::stringstream& ss, float& outVal) {
-    // Bỏ qua separator
-    while (ss.good() && IsSeparator(ss.peek())) {
-        ss.get();
-    }
-    if (ss.eof()) return false;
 
-    // Kiểm tra xem có phải bắt đầu số không
-    char next = ss.peek();
-    if (!isdigit(static_cast<unsigned char>(next)) && next != '-' && next != '+' && next != '.') {
-        return false;
+// Hàm helper để thêm Arc vào Path bằng cách xấp xỉ Bezier
+void AddSvgArcToPath(Gdiplus::GraphicsPath& path,
+    Gdiplus::PointF& cursor,
+    float rx, float ry,
+    float angle,
+    bool largeArcFlag, bool sweepFlag,
+    float x, float y) {
+
+    // 1. Xử lý các trường hợp đặc biệt
+    if (rx == 0 || ry == 0) {
+        // Nếu bán kính = 0, Arc suy biến thành đường thẳng
+        path.AddLine(cursor, Gdiplus::PointF(x, y));
+        cursor = Gdiplus::PointF(x, y);
+        return;
     }
 
-    ss >> outVal;
-    return !ss.fail();
+    // Lấy trị tuyệt đối của bán kính
+    rx = std::abs(rx);
+    ry = std::abs(ry);
+
+    // Điểm hiện tại (x0, y0) và điểm đích (x, y)
+    float x0 = cursor.X;
+    float y0 = cursor.Y;
+
+    // Nếu điểm đầu trùng điểm cuối, bỏ qua
+    if (x0 == x && y0 == y) return;
+
+    // 2. Tính toán theo công thức SVG Implementation Notes (F.6.5)
+    // Chuyển đổi từ độ sang radian
+    double phi = angle * M_PI / 180.0;
+    double sinPhi = std::sin(phi);
+    double cosPhi = std::cos(phi);
+
+    // Bước 1: Tính toạ độ điểm P1' (trong hệ trục đã xoay)
+    double dx = (x0 - x) / 2.0;
+    double dy = (y0 - y) / 2.0;
+    double x1p = cosPhi * dx + sinPhi * dy;
+    double y1p = -sinPhi * dx + cosPhi * dy;
+
+    // Bước 2: Điều chỉnh bán kính nếu cần
+    double rx_sq = rx * rx;
+    double ry_sq = ry * ry;
+    double x1p_sq = x1p * x1p;
+    double y1p_sq = y1p * y1p;
+
+    // Kiểm tra xem bán kính có đủ lớn để nối 2 điểm không
+    double lambda = x1p_sq / rx_sq + y1p_sq / ry_sq;
+    if (lambda > 1.0) {
+        // Scale bán kính lên
+        double lambdaRoot = std::sqrt(lambda);
+        rx *= lambdaRoot;
+        ry *= lambdaRoot;
+        rx_sq = rx * rx;
+        ry_sq = ry * ry;
+    }
+
+    // Bước 3: Tính tâm C' (cx', cy')
+    double sign = (largeArcFlag == sweepFlag) ? -1.0 : 1.0;
+    double numerator = rx_sq * ry_sq - rx_sq * y1p_sq - ry_sq * x1p_sq;
+    // Tránh lỗi chia cho 0 hoặc căn số âm do sai số float
+    if (numerator < 0.0) numerator = 0.0;
+    double denominator = rx_sq * y1p_sq + ry_sq * x1p_sq;
+
+    double coef = sign * std::sqrt(numerator / denominator);
+    double cxp = coef * ((rx * y1p) / ry);
+    double cyp = coef * (-(ry * x1p) / rx);
+
+    // Bước 4: Tính tâm C thực tế (cx, cy)
+    double cx = cosPhi * cxp - sinPhi * cyp + (x0 + x) / 2.0;
+    double cy = sinPhi * cxp + cosPhi * cyp + (y0 + y) / 2.0;
+
+    // Bước 5: Tính các góc bắt đầu và góc quét (Start Angle & Delta Angle)
+    auto angleBetween = [](double ux, double uy, double vx, double vy) {
+        double sign = (ux * vy - uy * vx < 0) ? -1.0 : 1.0;
+        double dot = ux * vx + uy * vy;
+        double lenU = std::sqrt(ux * ux + uy * uy);
+        double lenV = std::sqrt(vx * vx + vy * vy);
+        double arg = dot / (lenU * lenV);
+        if (arg > 1.0) arg = 1.0;
+        else if (arg < -1.0) arg = -1.0;
+        return sign * std::acos(arg);
+        };
+
+    // Vector (1, 0)
+    double startAngle = angleBetween(1.0, 0.0, (x1p - cxp) / rx, (y1p - cyp) / ry);
+    double deltaAngle = angleBetween((x1p - cxp) / rx, (y1p - cyp) / ry, (-x1p - cxp) / rx, (-y1p - cyp) / ry);
+
+    // Xử lý sweep flag
+    if (!sweepFlag && deltaAngle > 0) deltaAngle -= 2.0 * M_PI;
+    else if (sweepFlag && deltaAngle < 0) deltaAngle += 2.0 * M_PI;
+
+    // Bước 6: Chia cung thành các đoạn nhỏ và vẽ bằng Bezier
+    // Mỗi đoạn Bezier không nên vượt quá 90 độ (PI/2) để đảm bảo độ chính xác
+    int segments = static_cast<int>(std::ceil(std::abs(deltaAngle) / (M_PI / 2.0)));
+    double theta = startAngle;
+    double thetaStep = deltaAngle / segments;
+    double t = (8.0 / 3.0) * std::sin(thetaStep / 4.0) * std::sin(thetaStep / 4.0) / std::sin(thetaStep / 2.0);
+
+    for (int i = 0; i < segments; ++i) {
+        double cosTheta = std::cos(theta);
+        double sinTheta = std::sin(theta);
+        double thetaNext = theta + thetaStep;
+        double cosThetaNext = std::cos(thetaNext);
+        double sinThetaNext = std::sin(thetaNext);
+
+        // Điểm điều khiển trên đơn vị tròn
+        double e1x = cosTheta - t * sinTheta;
+        double e1y = sinTheta + t * cosTheta;
+        double e2x = cosThetaNext + t * sinThetaNext;
+        double e2y = sinThetaNext - t * cosThetaNext;
+
+        // Hàm transform điểm từ đơn vị tròn sang elip xoay
+        auto transformPoint = [&](double px, double py) {
+            double tx = rx * px;
+            double ty = ry * py;
+            double finalX = cosPhi * tx - sinPhi * ty + cx;
+            double finalY = sinPhi * tx + cosPhi * ty + cy;
+            return Gdiplus::PointF((float)finalX, (float)finalY);
+            };
+
+        Gdiplus::PointF cp1 = transformPoint(e1x, e1y);
+        Gdiplus::PointF cp2 = transformPoint(e2x, e2y);
+        Gdiplus::PointF endPt = transformPoint(cosThetaNext, sinThetaNext);
+
+        // Thêm curve vào path
+        path.AddBezier(cursor, cp1, cp2, endPt);
+
+        // Cập nhật điểm hiện tại
+        cursor = endPt;
+        theta = thetaNext;
+    }
 }
 
 void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStrokeAlpha) const {
@@ -77,11 +226,13 @@ void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStro
     std::stringstream ss(d);
     char cmd = 0;
     float args[7]; // Đủ chứa tham số cho lệnh C/c (6 số)
-    Gdiplus::PointF curr(0, 0);     // Điểm hiện tại
-    Gdiplus::PointF startFig(0, 0); // Điểm bắt đầu của sub-path (để đóng Z)
 
-    // Last control point for smooth curves (S/s, T/t) - chưa support S/T ở đây nhưng cần logic
-    // Gdiplus::PointF lastCtrl = curr; 
+    Gdiplus::PointF curr(0, 0);     // Điểm hiện tại
+    Gdiplus::PointF startFig(0, 0); // Điểm bắt đầu sub-path
+
+    // Biến hỗ trợ đường cong trơn (Smooth Curve S/s, T/t)
+    Gdiplus::PointF lastCtrl = curr;
+    char lastCmd = 0;
 
     while (true) {
         // Bỏ qua separator
@@ -94,14 +245,13 @@ void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStro
         if (std::isalpha(static_cast<unsigned char>(next))) {
             ss >> cmd;
         }
-        // Nếu là số/dấu -> Lặp lại lệnh cũ (Implicit command)
+        // Nếu là số/dấu -> Lệnh cũ (Implicit)
         else if (cmd == 0) {
-            ss.get(); continue; // Bỏ qua ký tự lạ đầu chuỗi
+            ss.get(); continue;
         }
-        // Đặc biệt: Sau M/m, các số tiếp theo được hiểu là L/l
+        // Implicit command sau M/m là L/l
         else if (cmd == 'M') cmd = 'L';
         else if (cmd == 'm') cmd = 'l';
-
 
         // Xử lý từng lệnh
         switch (cmd) {
@@ -111,6 +261,7 @@ void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStro
                 path.StartFigure();
                 curr = Gdiplus::PointF(args[0], args[1]);
                 startFig = curr;
+                lastCtrl = curr; // Reset control point
             }
             break;
         case 'm': // Relative
@@ -118,6 +269,7 @@ void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStro
                 path.StartFigure();
                 curr = Gdiplus::PointF(curr.X + args[0], curr.Y + args[1]);
                 startFig = curr;
+                lastCtrl = curr;
             }
             break;
 
@@ -174,22 +326,71 @@ void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStro
             if (ReadFloat(ss, args[0]) && ReadFloat(ss, args[1]) &&
                 ReadFloat(ss, args[2]) && ReadFloat(ss, args[3]) &&
                 ReadFloat(ss, args[4]) && ReadFloat(ss, args[5])) {
-                path.AddBezier(curr,
-                    Gdiplus::PointF(args[0], args[1]),
-                    Gdiplus::PointF(args[2], args[3]),
-                    Gdiplus::PointF(args[4], args[5]));
-                curr = Gdiplus::PointF(args[4], args[5]);
+
+                Gdiplus::PointF p1(args[0], args[1]);
+                Gdiplus::PointF p2(args[2], args[3]);
+                Gdiplus::PointF p3(args[4], args[5]);
+
+                path.AddBezier(curr, p1, p2, p3);
+
+                curr = p3;
+                lastCtrl = p2; // Lưu điểm điều khiển 2
             }
             break;
         case 'c':
             if (ReadFloat(ss, args[0]) && ReadFloat(ss, args[1]) &&
                 ReadFloat(ss, args[2]) && ReadFloat(ss, args[3]) &&
                 ReadFloat(ss, args[4]) && ReadFloat(ss, args[5])) {
-                path.AddBezier(curr,
-                    Gdiplus::PointF(curr.X + args[0], curr.Y + args[1]),
-                    Gdiplus::PointF(curr.X + args[2], curr.Y + args[3]),
-                    Gdiplus::PointF(curr.X + args[4], curr.Y + args[5]));
-                curr = Gdiplus::PointF(curr.X + args[4], curr.Y + args[5]);
+
+                Gdiplus::PointF p1(curr.X + args[0], curr.Y + args[1]);
+                Gdiplus::PointF p2(curr.X + args[2], curr.Y + args[3]);
+                Gdiplus::PointF p3(curr.X + args[4], curr.Y + args[5]);
+
+                path.AddBezier(curr, p1, p2, p3);
+
+                curr = p3;
+                lastCtrl = p2;
+            }
+            break;
+
+            // --- Smooth Cubic Bezier (S x2 y2 x y) ---
+            // Điểm điều khiển 1 là đối xứng của lastCtrl qua curr
+        case 'S':
+            if (ReadFloat(ss, args[0]) && ReadFloat(ss, args[1]) &&
+                ReadFloat(ss, args[2]) && ReadFloat(ss, args[3])) {
+
+                Gdiplus::PointF p2(args[0], args[1]);
+                Gdiplus::PointF p3(args[2], args[3]);
+
+                // Tính p1 tự động
+                Gdiplus::PointF p1 = curr;
+                if (lastCmd == 'C' || lastCmd == 'c' || lastCmd == 'S' || lastCmd == 's') {
+                    p1 = Reflect(lastCtrl, curr);
+                }
+
+                path.AddBezier(curr, p1, p2, p3);
+
+                curr = p3;
+                lastCtrl = p2;
+            }
+            break;
+        case 's':
+            if (ReadFloat(ss, args[0]) && ReadFloat(ss, args[1]) &&
+                ReadFloat(ss, args[2]) && ReadFloat(ss, args[3])) {
+
+                Gdiplus::PointF p2(curr.X + args[0], curr.Y + args[1]);
+                Gdiplus::PointF p3(curr.X + args[2], curr.Y + args[3]);
+
+                // Tính p1 tự động
+                Gdiplus::PointF p1 = curr;
+                if (lastCmd == 'C' || lastCmd == 'c' || lastCmd == 'S' || lastCmd == 's') {
+                    p1 = Reflect(lastCtrl, curr);
+                }
+
+                path.AddBezier(curr, p1, p2, p3);
+
+                curr = p3;
+                lastCtrl = p2;
             }
             break;
 
@@ -198,19 +399,167 @@ void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStro
         case 'z':
             path.CloseFigure();
             curr = startFig;
-            // Sau Z không có tham số, reset implicit command
-            // Nhưng theo chuẩn, nếu có Z thì lệnh tiếp theo bắt buộc phải là M/m hoặc kết thúc
+            break;
+            // --- Quadratic Bezier (Q x1 y1 x y) ---
+                // GDI+ không hỗ trợ Quadratic, phải convert sang Cubic
+        case 'Q':
+            if (ReadFloat(ss, args[0]) && ReadFloat(ss, args[1]) &&
+                ReadFloat(ss, args[2]) && ReadFloat(ss, args[3])) {
+
+                Gdiplus::PointF qCtrl(args[0], args[1]); // Điểm điều khiển Quadratic
+                Gdiplus::PointF end(args[2], args[3]);   // Điểm cuối
+
+                // Tính toán 2 điểm điều khiển cho Cubic Bezier (công thức 2/3)
+                Gdiplus::PointF c1(
+                    curr.X + (2.0f / 3.0f) * (qCtrl.X - curr.X),
+                    curr.Y + (2.0f / 3.0f) * (qCtrl.Y - curr.Y)
+                );
+                Gdiplus::PointF c2(
+                    end.X + (2.0f / 3.0f) * (qCtrl.X - end.X),
+                    end.Y + (2.0f / 3.0f) * (qCtrl.Y - end.Y)
+                );
+
+                path.AddBezier(curr, c1, c2, end);
+
+                curr = end;
+                lastCtrl = qCtrl; // Lưu điểm điều khiển gốc để dùng cho lệnh T tiếp theo (nếu có)
+            }
             break;
 
+        case 'q':
+            if (ReadFloat(ss, args[0]) && ReadFloat(ss, args[1]) &&
+                ReadFloat(ss, args[2]) && ReadFloat(ss, args[3])) {
+
+                Gdiplus::PointF qCtrl(curr.X + args[0], curr.Y + args[1]);
+                Gdiplus::PointF end(curr.X + args[2], curr.Y + args[3]);
+
+                // Convert sang Cubic
+                Gdiplus::PointF c1(
+                    curr.X + (2.0f / 3.0f) * (qCtrl.X - curr.X),
+                    curr.Y + (2.0f / 3.0f) * (qCtrl.Y - curr.Y)
+                );
+                Gdiplus::PointF c2(
+                    end.X + (2.0f / 3.0f) * (qCtrl.X - end.X),
+                    end.Y + (2.0f / 3.0f) * (qCtrl.Y - end.Y)
+                );
+
+                path.AddBezier(curr, c1, c2, end);
+
+                curr = end;
+                lastCtrl = qCtrl;
+            }
+            break;
+
+            // --- Smooth Quadratic Bezier (T x y) ---
+            // Điểm điều khiển được suy ra từ điểm điều khiển của lệnh trước đó
+        case 'T':
+            if (ReadFloat(ss, args[0]) && ReadFloat(ss, args[1])) {
+                Gdiplus::PointF end(args[0], args[1]);
+
+                // Tính điểm điều khiển tự động (đối xứng qua curr)
+                Gdiplus::PointF qCtrl = curr;
+                if (lastCmd == 'Q' || lastCmd == 'q' || lastCmd == 'T' || lastCmd == 't') {
+                    qCtrl = Reflect(lastCtrl, curr);
+                }
+
+                // Convert sang Cubic
+                Gdiplus::PointF c1(
+                    curr.X + (2.0f / 3.0f) * (qCtrl.X - curr.X),
+                    curr.Y + (2.0f / 3.0f) * (qCtrl.Y - curr.Y)
+                );
+                Gdiplus::PointF c2(
+                    end.X + (2.0f / 3.0f) * (qCtrl.X - end.X),
+                    end.Y + (2.0f / 3.0f) * (qCtrl.Y - end.Y)
+                );
+
+                path.AddBezier(curr, c1, c2, end);
+
+                curr = end;
+                lastCtrl = qCtrl;
+            }
+            break;
+
+        case 't':
+            if (ReadFloat(ss, args[0]) && ReadFloat(ss, args[1])) {
+                Gdiplus::PointF end(curr.X + args[0], curr.Y + args[1]);
+
+                Gdiplus::PointF qCtrl = curr;
+                if (lastCmd == 'Q' || lastCmd == 'q' || lastCmd == 'T' || lastCmd == 't') {
+                    qCtrl = Reflect(lastCtrl, curr);
+                }
+
+                Gdiplus::PointF c1(
+                    curr.X + (2.0f / 3.0f) * (qCtrl.X - curr.X),
+                    curr.Y + (2.0f / 3.0f) * (qCtrl.Y - curr.Y)
+                );
+                Gdiplus::PointF c2(
+                    end.X + (2.0f / 3.0f) * (qCtrl.X - end.X),
+                    end.Y + (2.0f / 3.0f) * (qCtrl.Y - end.Y)
+                );
+
+                path.AddBezier(curr, c1, c2, end);
+
+                curr = end;
+                lastCtrl = qCtrl;
+            }
+            break;
+            // --- Elliptical Arc (A rx ry rot large sweep x y) ---
+        case 'A':
+            if (ReadFloat(ss, args[0]) && ReadFloat(ss, args[1]) && // rx, ry
+                ReadFloat(ss, args[2]) &&                           // rotation
+                ReadFloat(ss, args[3]) && ReadFloat(ss, args[4]) && // large-arc, sweep
+                ReadFloat(ss, args[5]) && ReadFloat(ss, args[6])) { // x, y
+
+                float rx = args[0];
+                float ry = args[1];
+                float rot = args[2];
+                bool large = (args[3] != 0.0f);
+                bool sweep = (args[4] != 0.0f);
+                float x = args[5];
+                float y = args[6];
+
+                // Gọi hàm helper đã viết ở trên
+                AddSvgArcToPath(path, curr, rx, ry, rot, large, sweep, x, y);
+
+                // Cập nhật điểm cuối (Hàm helper đã cập nhật curr rồi, nhưng gán lại cho chắc chắn và đồng bộ logic)
+                curr = Gdiplus::PointF(x, y);
+
+                // SVG Spec: Sau lệnh A, điểm điều khiển Bezier (lastCtrl) reset về chính nó
+                // để lệnh S/T tiếp theo (nếu có) sẽ vẽ đường thẳng.
+                lastCtrl = curr;
+            }
+            break;
+
+        case 'a':
+            if (ReadFloat(ss, args[0]) && ReadFloat(ss, args[1]) &&
+                ReadFloat(ss, args[2]) &&
+                ReadFloat(ss, args[3]) && ReadFloat(ss, args[4]) &&
+                ReadFloat(ss, args[5]) && ReadFloat(ss, args[6])) {
+
+                float rx = args[0];
+                float ry = args[1];
+                float rot = args[2];
+                bool large = (args[3] != 0.0f);
+                bool sweep = (args[4] != 0.0f);
+
+                // Tính tọa độ tuyệt đối
+                float x = curr.X + args[5];
+                float y = curr.Y + args[6];
+
+                AddSvgArcToPath(path, curr, rx, ry, rot, large, sweep, x, y);
+
+                curr = Gdiplus::PointF(x, y);
+                lastCtrl = curr;
+            }
+            break;
         default:
-            // Lệnh chưa hỗ trợ (S, Q, T, A...) -> Bỏ qua ký tự này để tránh loop vô hạn
-            // ss.get(); 
-            // Tốt nhất là break vòng lặp nếu gặp lệnh lạ để tránh treo
-            return;
+            return; // Gặp lệnh lạ thì thoát
         }
+
+        lastCmd = cmd; // Cập nhật lệnh vừa thực thi
     }
 
-    // 3. Render (Phần này giữ nguyên logic cũ của bạn)
+    // 3. Render
     if (hasFill) {
         if (useLinearGradient && !gColors.empty() && !gOffsets.empty() && gColors.size() == gOffsets.size()) {
             std::vector<Gdiplus::Color> cols = gColors;
@@ -220,7 +569,7 @@ void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStro
             if (cols.size() > 2) {
                 brush.SetInterpolationColors(cols.data(), gOffsets.data(), static_cast<INT>(cols.size()));
             }
-            // Áp dụng Transform cho gradient nếu cần (như bài trước)
+
             if (hasTransform) {
                 brush.MultiplyTransform(&transform, Gdiplus::MatrixOrderPrepend);
             }

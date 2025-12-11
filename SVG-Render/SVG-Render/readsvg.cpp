@@ -220,7 +220,7 @@ std::vector<int> READSVG::getColor(const std::string& raw) {
             int g = std::stoi(s.substr(3, 2), nullptr, 16);
             int b = std::stoi(s.substr(5, 2), nullptr, 16);
             rgb = { clamp255i(r), clamp255i(g), clamp255i(b) };
-        }
+        }   
         else if (s.size() == 4) { // #RGB
             auto dup = [](char c) { return std::string(2, c); };
             int r = std::stoi(dup(s[1]), nullptr, 16);
@@ -792,10 +792,13 @@ string READSVG::FindInStyle(int i, const char* prop) {
     return (l == std::string::npos) ? std::string() : v.substr(l, r - l + 1);
 }
 bool READSVG::IsFillNone(int i) {
-    std::string v = FindInStyle(i, "fill:");
-    if (v.empty()) v = GetAttrRaw(i, "fill");
-    // so sánh lower-case
-    for (auto& c : v) c = (char)tolower((unsigned char)c);
+    std::string v = GetInheritedAttribute(i, "fill");
+
+    if (v.empty()) return false; 
+
+    std::transform(v.begin(), v.end(), v.begin(),
+        [](unsigned char c) { return std::tolower(c); });
+
     return v == "none";
 }
 

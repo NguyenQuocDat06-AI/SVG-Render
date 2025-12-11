@@ -16,7 +16,6 @@ private:
     std::vector<float> gOffsets;
 public:
     explicit SVGPATH(string d);
-
     void SetLinearGradient(const Gdiplus::PointF& p1, const Gdiplus::PointF& p2,
         const std::vector<Gdiplus::Color>& colors,
         const std::vector<float>& offsets);
