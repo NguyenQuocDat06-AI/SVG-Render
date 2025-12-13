@@ -7,8 +7,10 @@ light eggplant	#894585
 nasty green	#70b23f	
 really light blue	#d4ffff	
 tea	#65ab7c	
+darkmagenta	#993CA8
 warm purple	#952e8f	
 yellowish tan	#fcfc81	
+deepskyblue	#C2F0FF
 cement	#a5a391	
 dark grass green	#388004	
 dusty teal	#4c9085	
