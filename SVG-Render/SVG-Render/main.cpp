@@ -38,12 +38,57 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message,
         EndPaint(hWnd, &ps);
         return 0;
     }
+    case WM_MOUSEWHEEL:
+    {
+        int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+        if (delta > 0) {
+            g_doc->ZoomIn();
+        }
+        else if (delta < 0) {
+            g_doc->ZoomOut();
+        }
+        InvalidateRect(hWnd, NULL, FALSE);
+        break;
+    }
+    case WM_KEYDOWN:
+    {
+        switch (wParam) {
+        case VK_LEFT:
+            g_doc->RotateLeft();
+            InvalidateRect(hWnd, NULL, FALSE);
+            break;
+        case VK_RIGHT:
+            g_doc->RotateRight();
+            InvalidateRect(hWnd, NULL, FALSE);
+            break;
+        case 'A':
+            g_doc->MoveLeft();
+            InvalidateRect(hWnd, NULL, FALSE);
+            break;
+        case 'D':
+            g_doc->MoveRight();
+            InvalidateRect(hWnd, NULL, FALSE);
+            break;
+        case 'W':
+            g_doc->MoveUp();
+            InvalidateRect(hWnd, NULL, FALSE);
+            break;
+        case 'S':
+            g_doc->MoveDown();
+            InvalidateRect(hWnd, NULL, FALSE);
+            break;
+        default:
+            break;
+        }
+        break;
+    }
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);
     }
+
 }
 
 

@@ -1,5 +1,6 @@
 ﻿#include "svgdocument.h"
-#include <tuple>     
+#include <tuple>
+SVGDOCUMENT::SVGDOCUMENT(): zoomFactor(1.0f), rotationAngle(0.0f), translateX(0.0f), translateY(0.0f) {}
 SVGDOCUMENT::~SVGDOCUMENT() {
     for (auto s : shapes) delete s;
 }
@@ -47,10 +48,20 @@ void SVGDOCUMENT::Render(Gdiplus::Graphics& g, int destW, int destH) const {
     // 2. Vẽ các hình như bình thường
     // Lúc này Graphics 'g' đã mang ma trận biến đổi, nên các tọa độ nhỏ trong SVG
     // sẽ tự động được phóng to lên màn hình.
+    g.Clear(Gdiplus::Color(255, 255, 255, 255)); // nền trắng
+    //===Rotate===
+    float centerX = destW / 2.0f;
+    float centerY = destH / 2.0f;
+    g.TranslateTransform(centerX, centerY);
+    g.RotateTransform(rotationAngle);
+    g.TranslateTransform(-centerX, -centerY);
+    //===Translate===
+    g.TranslateTransform(translateX, translateY);
+    //===Zoom===
+    g.ScaleTransform(zoomFactor, zoomFactor);
     for (auto s : shapes) {
         s->Draw(g);
     }
-
     // Reset lại transform để không ảnh hưởng nếu vẽ cái khác sau đó
     g.ResetTransform();
 }
@@ -347,4 +358,28 @@ void SVGDOCUMENT::LoadSvgToDocument(const std::string& path) {
         }
 
     }
+}
+void SVGDOCUMENT::ZoomIn() {
+    zoomFactor *= 1.1f;
+}
+void SVGDOCUMENT::ZoomOut() {
+    zoomFactor *= 0.9f;
+}
+void SVGDOCUMENT::RotateLeft() {
+    rotationAngle -= 5.0f;
+}
+void SVGDOCUMENT::RotateRight() {
+    rotationAngle += 5.0f;
+}
+void SVGDOCUMENT::MoveUp() {
+    translateY -= 10.0f;//Dịch chuyển lên 10 đơn vị (trục Y của GDI+ đi xuống)
+}
+void SVGDOCUMENT::MoveDown() {
+    translateY += 10.0f; //Dịch chuyển xuống 10 đơn vị
+}
+void SVGDOCUMENT::MoveLeft() {
+    translateX -= 10.0f;
+}
+void SVGDOCUMENT::MoveRight() {
+    translateX += 10.0f;
 }
