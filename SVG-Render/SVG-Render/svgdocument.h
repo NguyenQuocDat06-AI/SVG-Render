@@ -10,6 +10,7 @@
 #include "line.h"
 #include "polyline.h"
 #include "path.h"
+#include <algorithm>
 #include <vector>
 using namespace std;
 class SVGDOCUMENT {

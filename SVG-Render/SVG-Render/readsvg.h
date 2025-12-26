@@ -9,6 +9,10 @@
 
 #include "rapidxml.hpp"
 
+#include <windows.h>
+#include <gdiplus.h>
+#pragma comment (lib, "gdiplus.lib")
+
 using namespace rapidxml;
 using namespace std;
 
@@ -20,11 +24,30 @@ struct ATTRIBUTE {
     int _depth = 0;                     // độ sâu trong cây (0 = root)
 };
 
-// Mô tả một linearGradient đã parse
+
 struct LinearGradientDef {
-    float x1 = 0, y1 = 0, x2 = 0, y2 = 0;                // toạ độ (userSpaceOnUse)
-    std::vector<float> offsets;                          // 0..1
-    std::vector<std::vector<int>> colors;                // mỗi phần tử là {r,g,b}
+    std::string id;
+    std::string href; // <--- THÊM BIẾN NÀY
+    float x1 = 0.0f, y1 = 0.0f, x2 = 1.0f, y2 = 0.0f;
+    std::string units = "objectBoundingBox";
+    std::string spreadMethod = "pad";
+    std::vector<float> offsets;
+    std::vector<std::vector<int>> colors;
+
+    std::vector<float> gradientTransform = { 1, 0, 0, 1, 0, 0 };
+};
+
+struct RadialGradientDef {
+    std::string id;
+    std::string href; // <--- THÊM BIẾN NÀY
+    float cx = 0.5f, cy = 0.5f, r = 0.5f;
+    float fx = 0.5f, fy = 0.5f;
+    std::string units = "objectBoundingBox";
+    std::string spreadMethod = "pad";
+    std::vector<float> offsets;
+    std::vector<std::vector<int>> colors;
+
+    std::vector<float> gradientTransform = { 1, 0, 0, 1, 0, 0 };
 };
 
 // Mô tả một transform operation
@@ -54,10 +77,10 @@ class READSVG {
 private:
     std::vector<ATTRIBUTE> _node;
     std::map<std::string, LinearGradientDef> _linearGradients; // id -> gradient
-
+    std::map<std::string, RadialGradientDef> _radialGradients;
     // Duyệt đệ quy toàn bộ cây node (svg, g, path, rect, defs, ...)
     void TraverseNode(xml_node<>* node, int parentIndex, int depth);
-
+    void ResolveGradientStops(const std::string& hrefId, std::vector<float>& outOffsets, std::vector<std::vector<int>>& outColors, int depth) const;
     // ========= Helpers private (khuyến nghị) =========
     std::vector<char> ReadFileToBuffer(const std::string& _path);
     static float ParseFloat(const std::string& s, float def = 0.0f);
@@ -184,8 +207,11 @@ public:
     bool IsFillNone(int i);
 
     // ========= Gradient =========
+    // Thêm biến lưu danh sách các gradient đã đọc được
+
+    // Hàm lấy gradient (đã có trong code bạn, nhưng check lại signature)
     bool TryGetLinearGradient(const std::string& id, LinearGradientDef& out) const;
-    
+    bool TryGetRadialGradient(const std::string& id, RadialGradientDef& out) const;
     // ========= Helper cho transform và kế thừa từ <g> =========
     // Lấy danh sách transform operations tích lũy từ root đến node i
     std::vector<TransformOperation> GetAccumulatedTransformOperations(int index) const;

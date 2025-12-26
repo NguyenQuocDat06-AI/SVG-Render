@@ -59,11 +59,14 @@ void SVGDOCUMENT::Render(Gdiplus::Graphics& g, int destW, int destH) const {
     g.TranslateTransform(translateX, translateY);
     //===Zoom===
     g.ScaleTransform(zoomFactor, zoomFactor);
+
+    g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+    g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+    g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
     for (auto s : shapes) {
         s->Draw(g);
     }
     // Reset lại transform để không ảnh hưởng nếu vẽ cái khác sau đó
-    g.ResetTransform();
 }
 BYTE SVGDOCUMENT::clamp255(int v) {
     if (v < 0) v = 0; else if (v > 255) v = 255;
@@ -107,16 +110,20 @@ void SVGDOCUMENT::ApplyTransformToShape(SVGSHAPE* shp, int index,float originX ,
             finalMatrix.RotateAt(op.values[0], center, Gdiplus::MatrixOrderPrepend);
         }
         break;
-        //case TransformType::Matrix:
-        //{
-        //    Gdiplus::Matrix m(op.values[0], op.values[1], op.values[2],
-        //        op.values[3], op.values[4], op.values[5]);
-        //    // Kiểm tra ma trận con có tạo được không
-        //    if (m.GetLastStatus() == Gdiplus::Ok) {
-        //        finalMatrix.Multiply(&m, Gdiplus::MatrixOrderAppend);
-        //    }
-        //}
-        //break;
+        case TransformType::Matrix:
+        {
+            // op.values = [a, b, c, d, e, f] tương ứng ma trận SVG:
+            // [ a c e ]
+            // [ b d f ]
+            // [ 0 0 1 ]
+            Gdiplus::Matrix m(op.values[0], op.values[1], op.values[2],
+                              op.values[3], op.values[4], op.values[5]);
+            if (m.GetLastStatus() == Gdiplus::Ok) {
+                // Giống Translate/Scale/Rotate: dùng Prepend để giữ đúng thứ tự
+                finalMatrix.Multiply(&m, Gdiplus::MatrixOrderPrepend);
+            }
+        }
+        break;
         //case TransformType::SkewX:
         //case TransformType::SkewY:
         //{
@@ -317,36 +324,114 @@ void SVGDOCUMENT::LoadSvgToDocument(const std::string& path) {
 
             AddShape(s);
         }
-        else if (tag == "path") {  // path có thể dùng linearGradient
+        else if (tag == "path") {
             std::string d = read.GetPathD(i);
             auto* s = new SVGPATH(d);
 
-            // Kiểm tra fill="url(#id)" để gán gradient nếu có
-            std::string rawFill = read.GetAttributeRaw(i, "fill", "");
-            if (!rawFill.empty()) {
-                // dạng url(#fill0)
-                auto pos = rawFill.find("url(");
-                if (pos != std::string::npos) {
-                    auto hashPos = rawFill.find('#', pos);
-                    auto endPos = rawFill.find(')', pos);
-                    if (hashPos != std::string::npos && endPos != std::string::npos && hashPos < endPos) {
-                        std::string id = rawFill.substr(hashPos + 1, endPos - hashPos - 1);
-                        LinearGradientDef grd;
-                        if (read.TryGetLinearGradient(id, grd) && !grd.colors.empty()) {
-                            std::vector<Gdiplus::Color> cols;
-                            std::vector<float> offs;
-                            for (size_t k = 0; k < grd.colors.size(); ++k) {
-                                const auto& c = grd.colors[k];
+            std::string rawFill = read.GetInheritedAttribute(i, "fill");
+
+            if (!rawFill.empty() && rawFill.find("url(") != std::string::npos) {
+                size_t start = rawFill.find("#");
+                size_t end = rawFill.find(")");
+
+                if (start != std::string::npos && end != std::string::npos) {
+                    std::string id = rawFill.substr(start + 1, end - start - 1);
+
+                    // --- TRƯỜNG HỢP A: LINEAR GRADIENT ---
+                    LinearGradientDef lGrd;
+                    if (read.TryGetLinearGradient(id, lGrd) && !lGrd.colors.empty()) {
+                        std::vector<Gdiplus::Color> cols;
+                        std::vector<float> offs;
+
+                        for (size_t k = 0; k < lGrd.colors.size(); ++k) {
+                            const auto& c = lGrd.colors[k];
+                            // FIX 1: Lấy Alpha từ phần tử thứ 4 (nếu có), nếu không thì 255
+                            int a = (c.size() >= 4) ? c[3] : 255;
+
+                            if (c.size() >= 3) {
+                                cols.emplace_back((BYTE)a, (BYTE)c[0], (BYTE)c[1], (BYTE)c[2]);
+                                float off = (k < lGrd.offsets.size()) ? lGrd.offsets[k] : 0.0f;
+                                offs.push_back(off);
+                            }
+                        }
+
+                        if (!cols.empty()) {
+                            Gdiplus::PointF p1(lGrd.x1, lGrd.y1);
+                            Gdiplus::PointF p2(lGrd.x2, lGrd.y2);
+
+                            // Lưu ý: Nếu SVG dùng objectBoundingBox, SVGPATH sẽ cần xử lý lại toạ độ này
+                            // dựa trên bounds của path. Code hiện tại đang truyền thẳng.
+
+                            s->SetLinearGradient(p1, p2, cols, offs, lGrd.gradientTransform);
+                        }
+                    }
+                    // --- TRƯỜNG HỢP B: RADIAL GRADIENT ---
+                    else {
+                        RadialGradientDef rGrd;
+                        if (read.TryGetRadialGradient(id, rGrd) && !rGrd.colors.empty()) {
+
+                            // FIX 1: Đảo ngược offset ĐÚNG CÁCH
+                            // SVG: offset 0 = Tâm (focal), offset 1 = Biên (edge)
+                            // GDI+: offset 0 = Biên (edge), offset 1 = Tâm (center)
+
+                            struct StopEntry {
+                                float offset;
+                                Gdiplus::Color col;
+                            };
+                            std::vector<StopEntry> finalStops;
+
+                            for (size_t k = 0; k < rGrd.colors.size(); ++k) {
+                                const auto& c = rGrd.colors[k];
+                                float rawOff = (k < rGrd.offsets.size()) ? rGrd.offsets[k] : 0.0f;
+
+                                // Lấy Alpha
+                                int a = (c.size() >= 4) ? c[3] : 255;
+
                                 if (c.size() >= 3) {
-                                    cols.emplace_back(255, (BYTE)c[0], (BYTE)c[1], (BYTE)c[2]);
-                                    float off = (k < grd.offsets.size()) ? grd.offsets[k] : 0.0f;
-                                    offs.push_back(off);
+                                    
+                                    float gdiOffset = 1.0f - rawOff;
+
+                                    // Clamp về [0, 1]
+                                    if (gdiOffset < 0.0f) gdiOffset = 0.0f;
+                                    if (gdiOffset > 1.0f) gdiOffset = 1.0f;
+
+                                    finalStops.push_back({
+                                        gdiOffset,
+                                        Gdiplus::Color((BYTE)a, (BYTE)c[0], (BYTE)c[1], (BYTE)c[2])
+                                        });
                                 }
                             }
+
+                            // FIX 2: QUAN TRỌNG - Sort tăng dần theo offset
+                            // GDI+ YÊU CẦU offset phải tăng dần NGHIÊM NGẶT
+                            std::sort(finalStops.begin(), finalStops.end(),
+                                [](const StopEntry& a, const StopEntry& b) {
+                                    return a.offset < b.offset;
+                                });
+
+                            // Tách ra 2 vector
+                            std::vector<Gdiplus::Color> cols;
+                            std::vector<float> offs;
+                            for (const auto& entry : finalStops) {
+                                cols.push_back(entry.col);
+                                offs.push_back(entry.offset);
+                            }
+
                             if (!cols.empty()) {
-                                Gdiplus::PointF p1(grd.x1, grd.y1);
-                                Gdiplus::PointF p2(grd.x2, grd.y2);
-                                s->SetLinearGradient(p1, p2, cols, offs);
+                                // Đảm bảo có ít nhất 2 màu (yêu cầu của GDI+)
+                                if (cols.size() == 1) {
+                                    cols.push_back(cols[0]);
+                                    offs.push_back(1.0f);
+                                }
+
+                                bool isUserSpace = (rGrd.units == "userSpaceOnUse");
+                                s->SetRadialGradient(
+                                    rGrd.cx, rGrd.cy, rGrd.r,
+                                    rGrd.fx, rGrd.fy,
+                                    isUserSpace,
+                                    cols, offs,
+                                    rGrd.gradientTransform
+                                );
                             }
                         }
                     }
@@ -355,8 +440,7 @@ void SVGDOCUMENT::LoadSvgToDocument(const std::string& path) {
             ApplyCommonPaint(s, i);
             ApplyTransformToShape(s, i);
             AddShape(s);
-        }
-
+            }
     }
 }
 void SVGDOCUMENT::ZoomIn() {

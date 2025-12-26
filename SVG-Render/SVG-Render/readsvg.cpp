@@ -3,6 +3,8 @@
 // (chèn dưới các hàm bạn đã có)
 // =========================
 
+
+
 #include <tuple>
 #include <cctype>
 #include <algorithm>
@@ -75,91 +77,305 @@ vector<char> READSVG::ReadFileToBuffer(const string& path) {
     return buffer;
 }
 
+static void _matMul(float M[6], const float T[6]) {
+    float a = M[0] * T[0] + M[2] * T[1];
+    float b = M[1] * T[0] + M[3] * T[1];
+    float c = M[0] * T[2] + M[2] * T[3];
+    float d = M[1] * T[2] + M[3] * T[3];
+    float e = M[0] * T[4] + M[2] * T[5] + M[4];
+    float f = M[1] * T[4] + M[3] * T[5] + M[5];
+    M[0] = a; M[1] = b; M[2] = c; M[3] = d; M[4] = e; M[5] = f;
+}
+
+void READSVG::ResolveGradientStops(const std::string& hrefId, std::vector<float>& outOffsets, std::vector<std::vector<int>>& outColors, int depth) const {
+    if (depth > 5) return; // Tránh vòng lặp vô tận
+
+    // 1. Thử tìm trong Linear Map
+    auto itL = _linearGradients.find(hrefId);
+    if (itL != _linearGradients.end()) {
+        if (!itL->second.colors.empty()) {
+            outOffsets = itL->second.offsets;
+            outColors = itL->second.colors;
+            return;
+        }
+        // Nếu Linear này cũng rỗng nhưng có href -> đệ quy tiếp
+        if (!itL->second.href.empty()) {
+            ResolveGradientStops(itL->second.href, outOffsets, outColors, depth + 1);
+            return;
+        }
+    }
+
+    // 2. Thử tìm trong Radial Map
+    auto itR = _radialGradients.find(hrefId);
+    if (itR != _radialGradients.end()) {
+        if (!itR->second.colors.empty()) {
+            outOffsets = itR->second.offsets;
+            outColors = itR->second.colors;
+            return;
+        }
+        if (!itR->second.href.empty()) {
+            ResolveGradientStops(itR->second.href, outOffsets, outColors, depth + 1);
+            return;
+        }
+    }
+}
+
+
+bool READSVG::TryGetRadialGradient(const std::string& id, RadialGradientDef& out) const {
+    auto it = _radialGradients.find(id);
+    if (it == _radialGradients.end()) return false;
+    out = it->second;
+
+    // Nếu không có stops nhưng có href -> Đi tìm stops từ cha
+    if (out.colors.empty() && !out.href.empty()) {
+        const_cast<READSVG*>(this)->ResolveGradientStops(out.href, out.offsets, out.colors, 0);
+    }
+    return true;
+}
+
 // Duyệt đệ quy một node và toàn bộ con của nó, lưu vào _node
 void READSVG::TraverseNode(xml_node<>* node, int parentIndex, int depth) {
     if (!node) return;
 
-    // Chỉ quan tâm node dạng element (bỏ qua text/comment)
     if (node->type() == node_element) {
+        // 1. Lấy Attributes
         map<string, string> _temp;
         for (xml_attribute<>* attr = node->first_attribute(); attr; attr = attr->next_attribute()) {
             _temp[attr->name()] = attr->value();
         }
-        // Lấy text content cho <text> từ node con kiểu node_data
+
+        // 2. Lấy Text Content (Gom tất cả node con)
         std::string textValue;
         if (std::strcmp(node->name(), "text") == 0) {
-            if (xml_node<>* t = node->first_node()) {
-                if (t->type() == node_data && t->value()) {
-                    textValue = t->value();
+            for (xml_node<>* child = node->first_node(); child; child = child->next_sibling()) {
+                if (child->type() == node_data && child->value()) {
+                    textValue += child->value();
                 }
             }
         }
         else {
             textValue = node->value() ? node->value() : "";
         }
+
+        // 3. Tạo Node
         int currentIndex = (int)_node.size();
         ATTRIBUTE attrNode{ node->name(), textValue, _temp, parentIndex, depth };
         _node.push_back(attrNode);
 
-        // Duyệt các con với parentIndex = currentIndex
+        // 4. Đệ quy duyệt con
         for (xml_node<>* child = node->first_node(); child; child = child->next_sibling()) {
             TraverseNode(child, currentIndex, depth + 1);
         }
 
-        // Nếu là linearGradient thì parse vào bảng gradient riêng
-        if (attrNode._tags == "linearGradient") {
-            auto itId = attrNode._att.find("id");
-            if (itId != attrNode._att.end()) {
-                std::string id = itId->second;
-                LinearGradientDef def;
-                def.x1 = ParseFloat(attrNode._att["x1"], 0.0f);
-                def.y1 = ParseFloat(attrNode._att["y1"], 0.0f);
-                def.x2 = ParseFloat(attrNode._att["x2"], def.x1);
-                def.y2 = ParseFloat(attrNode._att["y2"], def.y1);
+        // 5. Parse Gradient (Linear & Radial)
 
-                // Duyệt các stop
+        // Helper: Lấy giá trị float, xử lý %
+        auto getValPercent = [&](const char* key, float defVal) {
+            std::string v = getAttr(attrNode, key);
+            if (v.empty()) return defVal;
+            float val = ParseFloat(v, defVal);
+            if (v.back() == '%') val /= 100.0f;
+            return val;
+            };
+
+        // --- A. LINEAR GRADIENT ---
+        if (attrNode._tags == "linearGradient") {
+            std::string id = getAttr(attrNode, "id");
+            if (!id.empty()) {
+                LinearGradientDef def;
+                def.id = id;
+
+                def.href = getAttr(attrNode, "href");
+                if (def.href.empty()) def.href = getAttr(attrNode, "xlink:href");
+                // Xóa dấu # ở đầu nếu có
+                if (!def.href.empty() && def.href[0] == '#') def.href.erase(0, 1);
+
+                def.x1 = getValPercent("x1", 0.0f);
+                def.y1 = getValPercent("y1", 0.0f);
+                def.x2 = getValPercent("x2", 1.0f);
+                def.y2 = getValPercent("y2", 0.0f);
+                def.units = getAttr(attrNode, "gradientUnits");
+                def.spreadMethod = getAttr(attrNode, "spreadMethod");
+
+                // === Xử lý gradientTransform ===
+                std::string gradTransStr = getAttr(attrNode, "gradientTransform");
+                if (!gradTransStr.empty()) {
+                    auto ops = ParseTransformOperations(gradTransStr);
+                    float m[6] = { 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f };
+                    for (const auto& op : ops) {
+                        float t[6] = { 1, 0, 0, 1, 0, 0 };
+                        if (op.type == TransformType::Matrix) {
+                            std::memcpy(t, op.values, 6 * sizeof(float));
+                        }
+                        else if (op.type == TransformType::Translate) {
+                            t[4] = op.values[0]; t[5] = op.values[1];
+                        }
+                        else if (op.type == TransformType::Scale) {
+                            t[0] = op.values[0]; t[3] = op.values[1];
+                        }
+                        else if (op.type == TransformType::Rotate) {
+                            float rad = op.values[0] * 3.1415926535f / 180.0f;
+                            float c = std::cos(rad), s = std::sin(rad);
+                            t[0] = c; t[1] = s; t[2] = -s; t[3] = c;
+                        }
+                        _matMul(m, t);
+                    }
+                    def.gradientTransform.assign(m, m + 6);
+                }
+
+                // Parse Stops
                 for (xml_node<>* s = node->first_node("stop"); s; s = s->next_sibling("stop")) {
                     std::map<std::string, std::string> stopAtt;
-                    for (xml_attribute<>* a = s->first_attribute(); a; a = a->next_attribute()) {
+                    for (xml_attribute<>* a = s->first_attribute(); a; a = a->next_attribute())
                         stopAtt[a->name()] = a->value();
-                    }
-                    std::string offStr;
-                    auto itOff = stopAtt.find("offset");
-                    if (itOff != stopAtt.end()) offStr = itOff->second;
+
+                    std::map<std::string, std::string> styleMap;
+                    auto itStyle = stopAtt.find("style");
+                    if (itStyle != stopAtt.end()) styleMap = _parseStyleKV(itStyle->second);
+
+                    auto getValue = [&](const std::string& key) -> std::string {
+                        if (styleMap.count(key)) return styleMap[key];
+                        if (stopAtt.count(key)) return stopAtt[key];
+                        return "";
+                        };
+
+                    std::string offStr = getValue("offset");
                     float off = 0.0f;
                     if (!offStr.empty()) {
-                        // offset có thể là "0.5" hoặc "50%"
-                        if (offStr.back() == '%') {
-                            off = ParseFloat(offStr.substr(0, offStr.size() - 1), 0.0f) / 100.0f;
-                        }
-                        else {
-                            off = ParseFloat(offStr, 0.0f);
-                        }
+                        off = ParseFloat(offStr, 0.0f);
+                        if (offStr.back() == '%') off /= 100.0f;
                     }
-                    // màu: ưu tiên stop-color, nếu không có thì tìm trong style
-                    std::string colorStr;
-                    auto itCol = stopAtt.find("stop-color");
-                    if (itCol != stopAtt.end()) {
-                        colorStr = itCol->second;
-                    }
-                    else {
-                        auto itStyle = stopAtt.find("style");
-                        if (itStyle != stopAtt.end()) {
-                            // style="stop-color:#FFC746;stop-opacity:1"
-                            std::map<std::string, std::string> kv = _parseStyleKV(itStyle->second);
-                            std::map<std::string, std::string>::const_iterator it2 = kv.find("stop-color");
-                            if (it2 != kv.end()) {
-                                colorStr = it2->second;
-                            }
-                        }
-                    }
-                    auto rgb = ParseColor(colorStr); // có thể rỗng
+
+                 
+                    float opacity = 1.0f;
+                    std::string opStr = getValue("stop-opacity");
+                    if (!opStr.empty()) opacity = ParseOpacity(opStr, 1.0f);
+
+                    std::string colorStr = getValue("stop-color");
+                    auto rgb = ParseColor(colorStr);
+                    if (rgb.empty() && !colorStr.empty() && colorStr != "none") rgb = { 0, 0, 0 };
+
                     if (!rgb.empty()) {
+                        rgb.push_back(static_cast<int>(opacity * 255.0f));
+
                         def.offsets.push_back(off);
                         def.colors.push_back(rgb);
                     }
                 }
                 _linearGradients[id] = def;
+            }
+        }
+        // --- B. RADIAL GRADIENT ---
+        else if (attrNode._tags == "radialGradient") {
+            std::string id = getAttr(attrNode, "id");
+            if (!id.empty()) {
+                RadialGradientDef def;
+                def.id = id;
+
+                def.href = getAttr(attrNode, "href");
+                if (def.href.empty()) def.href = getAttr(attrNode, "xlink:href");
+                if (!def.href.empty() && def.href[0] == '#') def.href.erase(0, 1);
+
+                // FIX CRITICAL: Hàm parse giá trị phần trăm
+                auto getValPercent = [&](const char* key, float defVal) -> float {
+                    std::string v = getAttr(attrNode, key);
+                    if (v.empty()) return defVal;
+
+                    // Kiểm tra có dấu % không
+                    bool hasPercent = (!v.empty() && v.back() == '%');
+
+                    // Parse số (bỏ dấu % nếu có)
+                    std::string numStr = hasPercent ? v.substr(0, v.size() - 1) : v;
+                    float val = ParseFloat(numStr, defVal);
+
+                    // QUAN TRỌNG: Nếu có %, chia 100 để ra tỷ lệ
+                    // Ví dụ: "210%" -> 210 / 100 = 2.1
+                    //        "-100%" -> -100 / 100 = -1.0
+                    if (hasPercent) {
+                        val /= 100.0f;
+                    }
+
+                    return val;
+                    };
+
+                // Parse các thuộc tính (mặc định theo SVG spec)
+                def.cx = getValPercent("cx", 0.5f);  // 50%
+                def.cy = getValPercent("cy", 0.5f);  // 50%
+                def.r = getValPercent("r", 0.5f);  // 50%
+                def.fx = getValPercent("fx", def.cx); // Mặc định = cx
+                def.fy = getValPercent("fy", def.cy); // Mặc định = cy
+
+                def.units = getAttr(attrNode, "gradientUnits");
+                def.spreadMethod = getAttr(attrNode, "spreadMethod");
+
+                // === Xử lý gradientTransform ===
+                std::string gradTransStr = getAttr(attrNode, "gradientTransform");
+                if (!gradTransStr.empty()) {
+                    auto ops = ParseTransformOperations(gradTransStr);
+                    float m[6] = { 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f };
+                    for (const auto& op : ops) {
+                        float t[6] = { 1, 0, 0, 1, 0, 0 };
+                        if (op.type == TransformType::Matrix) {
+                            std::memcpy(t, op.values, 6 * sizeof(float));
+                        }
+                        else if (op.type == TransformType::Translate) {
+                            t[4] = op.values[0]; t[5] = op.values[1];
+                        }
+                        else if (op.type == TransformType::Scale) {
+                            t[0] = op.values[0]; t[3] = op.values[1];
+                        }
+                        else if (op.type == TransformType::Rotate) {
+                            float rad = op.values[0] * 3.1415926535f / 180.0f;
+                            float c = std::cos(rad), s = std::sin(rad);
+                            t[0] = c; t[1] = s; t[2] = -s; t[3] = c;
+                        }
+                        _matMul(m, t);
+                    }
+                    def.gradientTransform.assign(m, m + 6);
+                }
+
+                // Parse Stops
+                for (xml_node<>* s = node->first_node("stop"); s; s = s->next_sibling("stop")) {
+                    std::map<std::string, std::string> stopAtt;
+                    for (xml_attribute<>* a = s->first_attribute(); a; a = a->next_attribute())
+                        stopAtt[a->name()] = a->value();
+
+                    std::map<std::string, std::string> styleMap;
+                    auto itStyle = stopAtt.find("style");
+                    if (itStyle != stopAtt.end()) styleMap = _parseStyleKV(itStyle->second);
+
+                    auto getValue = [&](const std::string& key) -> std::string {
+                        if (styleMap.count(key)) return styleMap[key];
+                        if (stopAtt.count(key)) return stopAtt[key];
+                        return "";
+                        };
+
+                    // Parse offset
+                    std::string offStr = getValue("offset");
+                    float off = 0.0f;
+                    if (!offStr.empty()) {
+                        off = ParseFloat(offStr, 0.0f);
+                        if (offStr.back() == '%') off /= 100.0f;
+                    }
+
+                    // Parse opacity
+                    float opacity = 1.0f;
+                    std::string opStr = getValue("stop-opacity");
+                    if (!opStr.empty()) opacity = ParseOpacity(opStr, 1.0f);
+
+                    // Parse color
+                    std::string colorStr = getValue("stop-color");
+                    auto rgb = ParseColor(colorStr);
+                    if (rgb.empty() && !colorStr.empty() && colorStr != "none")
+                        rgb = { 0, 0, 0 };
+
+                    if (!rgb.empty()) {
+                        rgb.push_back(static_cast<int>(opacity * 255.0f));
+                        def.offsets.push_back(off);
+                        def.colors.push_back(rgb);
+                    }
+                }
+                _radialGradients[id] = def;
             }
         }
     }
@@ -461,15 +677,7 @@ std::pair<float, float> READSVG::ParsePair(const std::string& sx, const std::str
 }
 
 // nhân ma trận 2D SVG [a b c d e f]: M = M * T
-static void _matMul(float M[6], const float T[6]) {
-    float a = M[0] * T[0] + M[2] * T[1];
-    float b = M[1] * T[0] + M[3] * T[1];
-    float c = M[0] * T[2] + M[2] * T[3];
-    float d = M[1] * T[2] + M[3] * T[3];
-    float e = M[0] * T[4] + M[2] * T[5] + M[4];
-    float f = M[1] * T[4] + M[3] * T[5] + M[5];
-    M[0] = a; M[1] = b; M[2] = c; M[3] = d; M[4] = e; M[5] = f;
-}
+
 
 std::vector<TransformOperation> READSVG::ParseTransformOperations(const std::string& s) {
     std::vector<TransformOperation> operations;
@@ -806,6 +1014,12 @@ bool READSVG::TryGetLinearGradient(const std::string& id, LinearGradientDef& out
     auto it = _linearGradients.find(id);
     if (it == _linearGradients.end()) return false;
     out = it->second;
+
+    // Nếu không có stops nhưng có href -> Đi tìm stops từ cha
+    if (out.colors.empty() && !out.href.empty()) {
+        // const_cast để gọi hàm helper (hoặc copy logic vào đây)
+        const_cast<READSVG*>(this)->ResolveGradientStops(out.href, out.offsets, out.colors, 0);
+    }
     return true;
 }
 

@@ -57,20 +57,48 @@ SVGPATH::SVGPATH(std::string d) : d(d) {
 
 void SVGPATH::SetLinearGradient(const Gdiplus::PointF& p1, const Gdiplus::PointF& p2,
     const std::vector<Gdiplus::Color>& colors,
-    const std::vector<float>& offsets) {
-    if (colors.empty() || offsets.empty() || colors.size() != offsets.size()) {
-        useLinearGradient = false;
-        gColors.clear();
-        gOffsets.clear();
-        return;
-    }
+    const std::vector<float>& offsets,
+    const std::vector<float>& transformMtx) // <---
+{
+    // ... (Code cũ check rỗng) ...
     useLinearGradient = true;
-    gStart = p1;
-    gEnd = p2;
-    gColors = colors;
-    gOffsets = offsets;
+    gStart = p1; gEnd = p2; gColors = colors; gOffsets = offsets;
+
+    // Lưu transform
+    if (transformMtx.size() >= 6) {
+        gradMatrix.SetElements(transformMtx[0], transformMtx[1], transformMtx[2],
+            transformMtx[3], transformMtx[4], transformMtx[5]);
+        hasGradTransform = true;
+    }
+    else {
+        gradMatrix.Reset();
+        hasGradTransform = false;
+    }
 }
 
+
+void SVGPATH::SetRadialGradient(float cx, float cy, float r, float fx, float fy,
+    bool userSpace,
+    const std::vector<Gdiplus::Color>& colors,
+    const std::vector<float>& offsets,
+    const std::vector<float>& transformMtx) // <---
+{
+    // ... (Code cũ check rỗng) ...
+    useRadialGradient = true; useLinearGradient = false;
+    radCx = cx; radCy = cy; radR = r; radFx = fx; radFy = fy;
+    radUserSpace = userSpace; radColors = colors; radOffsets = offsets;
+
+    // Lưu transform
+    if (transformMtx.size() >= 6) {
+        gradMatrix.SetElements(transformMtx[0], transformMtx[1], transformMtx[2],
+            transformMtx[3], transformMtx[4], transformMtx[5]);
+        hasGradTransform = true;
+    }
+    else {
+        gradMatrix.Reset();
+        hasGradTransform = false;
+    }
+}
 
 
 
@@ -207,8 +235,34 @@ void AddSvgArcToPath(Gdiplus::GraphicsPath& path,
     }
 }
 
+bool ReadFlag(std::stringstream& ss, bool& outVal) {
+    // Bỏ qua separator (khoảng trắng, phẩy)
+    while (ss.good() && IsSeparator(ss.peek())) {
+        ss.get();
+    }
+    if (ss.eof()) return false;
+
+    char c = ss.peek();
+    if (c == '0') {
+        outVal = false;
+        ss.get(); // Ăn ký tự '0'
+        return true;
+    }
+    else if (c == '1') {
+        outVal = true;
+        ss.get(); // Ăn ký tự '1'
+        return true;
+    }
+    return false; // Không phải 0/1 là lỗi
+}
+
+
 void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStrokeAlpha) const {
     if (d.empty()) return;
+
+    // Transform của shape đã được áp dụng trong `SVGSHAPE::Draw`
+    // nên ở đây không nhân thêm nữa, tránh việc gradient bị lệch
+    // khi đứng yên và chỉ đúng màu khi pan/zoom.
 
     Gdiplus::GraphicsPath path;
 
@@ -505,53 +559,54 @@ void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStro
             break;
             // --- Elliptical Arc (A rx ry rot large sweep x y) ---
         case 'A':
-            if (ReadFloat(ss, args[0]) && ReadFloat(ss, args[1]) && // rx, ry
-                ReadFloat(ss, args[2]) &&                           // rotation
-                ReadFloat(ss, args[3]) && ReadFloat(ss, args[4]) && // large-arc, sweep
-                ReadFloat(ss, args[5]) && ReadFloat(ss, args[6])) { // x, y
+        {
+            // Khai báo biến tạm để đọc
+            float rx, ry, rot, x, y;
+            bool large, sweep;
 
-                float rx = args[0];
-                float ry = args[1];
-                float rot = args[2];
-                bool large = (args[3] != 0.0f);
-                bool sweep = (args[4] != 0.0f);
-                float x = args[5];
-                float y = args[6];
+            // 3 tham số đầu là float
+            if (ReadFloat(ss, rx) && ReadFloat(ss, ry) && ReadFloat(ss, rot)) {
 
-                // Gọi hàm helper đã viết ở trên
-                AddSvgArcToPath(path, curr, rx, ry, rot, large, sweep, x, y);
+                // QUAN TRỌNG: 2 tham số tiếp theo là Flag -> Dùng ReadFlag
+                if (ReadFlag(ss, large) && ReadFlag(ss, sweep)) {
 
-                // Cập nhật điểm cuối (Hàm helper đã cập nhật curr rồi, nhưng gán lại cho chắc chắn và đồng bộ logic)
-                curr = Gdiplus::PointF(x, y);
+                    // 2 tham số cuối là tọa độ -> Dùng ReadFloat
+                    if (ReadFloat(ss, x) && ReadFloat(ss, y)) {
 
-                // SVG Spec: Sau lệnh A, điểm điều khiển Bezier (lastCtrl) reset về chính nó
-                // để lệnh S/T tiếp theo (nếu có) sẽ vẽ đường thẳng.
-                lastCtrl = curr;
+                        AddSvgArcToPath(path, curr, rx, ry, rot, large, sweep, x, y);
+
+                        curr = Gdiplus::PointF(x, y);
+                        lastCtrl = curr;
+                    }
+                }
             }
             break;
+        }
 
         case 'a':
-            if (ReadFloat(ss, args[0]) && ReadFloat(ss, args[1]) &&
-                ReadFloat(ss, args[2]) &&
-                ReadFloat(ss, args[3]) && ReadFloat(ss, args[4]) &&
-                ReadFloat(ss, args[5]) && ReadFloat(ss, args[6])) {
+        {
+            float rx, ry, rot, dx, dy;
+            bool large, sweep;
 
-                float rx = args[0];
-                float ry = args[1];
-                float rot = args[2];
-                bool large = (args[3] != 0.0f);
-                bool sweep = (args[4] != 0.0f);
+            if (ReadFloat(ss, rx) && ReadFloat(ss, ry) && ReadFloat(ss, rot)) {
 
-                // Tính tọa độ tuyệt đối
-                float x = curr.X + args[5];
-                float y = curr.Y + args[6];
+                // QUAN TRỌNG: Dùng ReadFlag
+                if (ReadFlag(ss, large) && ReadFlag(ss, sweep)) {
 
-                AddSvgArcToPath(path, curr, rx, ry, rot, large, sweep, x, y);
+                    if (ReadFloat(ss, dx) && ReadFloat(ss, dy)) {
 
-                curr = Gdiplus::PointF(x, y);
-                lastCtrl = curr;
+                        float x = curr.X + dx;
+                        float y = curr.Y + dy;
+
+                        AddSvgArcToPath(path, curr, rx, ry, rot, large, sweep, x, y);
+
+                        curr = Gdiplus::PointF(x, y);
+                        lastCtrl = curr;
+                    }
+                }
             }
             break;
+        }
         default:
             return; // Gặp lệnh lạ thì thoát
         }
@@ -567,20 +622,96 @@ void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStro
 
             Gdiplus::LinearGradientBrush brush(gStart, gEnd, cols.front(), cols.back());
             if (cols.size() > 2) {
-                brush.SetInterpolationColors(cols.data(), gOffsets.data(), static_cast<INT>(cols.size()));
+                brush.SetInterpolationColors(cols.data(), gOffsets.data(), (INT)cols.size());
             }
 
+            if (hasGradTransform) {
+                brush.MultiplyTransform(&gradMatrix, Gdiplus::MatrixOrderPrepend);
+            }
             if (hasTransform) {
                 brush.MultiplyTransform(&transform, Gdiplus::MatrixOrderPrepend);
             }
+
             g.FillPath(&brush, &path);
         }
+        else if (useRadialGradient && !radColors.empty()) {
+            Gdiplus::RectF bounds;
+            path.GetBounds(&bounds, nullptr, nullptr);
+
+            Gdiplus::GraphicsPath gradPath;
+
+            if (radUserSpace) {
+                // userSpaceOnUse: Đơn vị Pixel
+                gradPath.AddEllipse(radCx - radR, radCy - radR, radR * 2, radR * 2);
+                if (hasGradTransform) gradPath.Transform(&gradMatrix);
+            }
+            else {
+                // objectBoundingBox: Đơn vị 0..1
+                gradPath.AddEllipse(radCx - radR, radCy - radR, radR * 2, radR * 2);
+
+                Gdiplus::Matrix finalMat;
+                if (hasGradTransform) finalMat.Multiply(&gradMatrix, Gdiplus::MatrixOrderAppend);
+
+                finalMat.Scale(bounds.Width, bounds.Height, Gdiplus::MatrixOrderAppend);
+                finalMat.Translate(bounds.X, bounds.Y, Gdiplus::MatrixOrderAppend);
+
+                gradPath.Transform(&finalMat);
+            }
+
+            Gdiplus::PathGradientBrush pthGrBrush(&gradPath);
+
+            // Tính tâm (Focal Point)
+            Gdiplus::PointF centerPoint(radFx, radFy);
+            if (radUserSpace) {
+                if (hasGradTransform) gradMatrix.TransformPoints(&centerPoint);
+            }
+            else {
+                Gdiplus::Matrix pointMat;
+                if (hasGradTransform) pointMat.Multiply(&gradMatrix, Gdiplus::MatrixOrderAppend);
+                pointMat.Scale(bounds.Width, bounds.Height, Gdiplus::MatrixOrderAppend);
+                pointMat.Translate(bounds.X, bounds.Y, Gdiplus::MatrixOrderAppend);
+                pointMat.TransformPoints(&centerPoint);
+            }
+            pthGrBrush.SetCenterPoint(centerPoint);
+
+            // Xử lý màu (Đảo ngược theo logic đã fix)
+            struct StopEntry { float offset; Gdiplus::Color col; };
+            std::vector<StopEntry> finalStops;
+            for (size_t k = 0; k < radColors.size(); ++k) {
+                float rawOff = (k < radOffsets.size()) ? radOffsets[k] : 0.0f;
+                int a = (radColors[k].GetAlpha() * finalFillAlpha) / 255;
+                // Offset đã đảo ở svgdocument, giữ nguyên
+                float gdiOffset = rawOff;
+                if (gdiOffset < 0.0f) gdiOffset = 0.0f; else if (gdiOffset > 1.0f) gdiOffset = 1.0f;
+                finalStops.push_back({ gdiOffset, Gdiplus::Color((BYTE)a, radColors[k].GetR(), radColors[k].GetG(), radColors[k].GetB()) });
+            }
+            // Sort
+            std::sort(finalStops.begin(), finalStops.end(), [](const StopEntry& a, const StopEntry& b) { return a.offset < b.offset; });
+
+            std::vector<Gdiplus::Color> cols; std::vector<float> offs;
+            if (!finalStops.empty() && finalStops.front().offset > 0.001f) { cols.push_back(finalStops.front().col); offs.push_back(0.0f); }
+            for (const auto& e : finalStops) { cols.push_back(e.col); offs.push_back(e.offset); }
+            if (!finalStops.empty() && finalStops.back().offset < 0.999f) { cols.push_back(finalStops.back().col); offs.push_back(1.0f); }
+
+            if (!cols.empty()) {
+                if (cols.size() == 1) { cols.push_back(cols[0]); offs.push_back(1.0f); }
+                pthGrBrush.SetInterpolationColors(cols.data(), offs.data(), (INT)cols.size());
+
+                // Tô nền pad
+                if (cols.size() > 0) {
+                    Gdiplus::SolidBrush bgBrush(cols[0]);
+                    g.FillPath(&bgBrush, &path);
+                }
+                g.FillPath(&pthGrBrush, &path);
+            }
+        }
         else {
-            Gdiplus::SolidBrush fillBrush(Gdiplus::Color(finalFillAlpha, fillColor.GetR(), fillColor.GetG(), fillColor.GetB()));
+            // Solid Fill (không dùng gradient)
+            Gdiplus::SolidBrush fillBrush(Gdiplus::Color(finalFillAlpha,
+                fillColor.GetR(), fillColor.GetG(), fillColor.GetB()));
             g.FillPath(&fillBrush, &path);
         }
     }
-
     if (hasStroke && strokeWidth > 0) {
         Gdiplus::Pen strokePen(Gdiplus::Color(finalStrokeAlpha, strokeColor.GetR(), strokeColor.GetG(), strokeColor.GetB()), strokeWidth);
         strokePen.SetMiterLimit(strokeMiterLimit);
