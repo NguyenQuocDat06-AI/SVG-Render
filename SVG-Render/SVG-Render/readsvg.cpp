@@ -170,12 +170,12 @@ void READSVG::TraverseNode(xml_node<>* node, int parentIndex, int depth) {
         // 5. Parse Gradient (Linear & Radial)
 
         // Helper: Lấy giá trị float, xử lý %
-        auto getValPercent = [&](const char* key, float defVal) {
+        auto getValPercent = [&](const char* key, float defVal) -> float {
             std::string v = getAttr(attrNode, key);
             if (v.empty()) return defVal;
-            float val = ParseFloat(v, defVal);
-            if (v.back() == '%') val /= 100.0f;
-            return val;
+            bool hasPercent = (v.back() == '%');
+            float val = ParseFloat(hasPercent ? v.substr(0, v.size() - 1) : v, defVal);
+            return hasPercent ? (val / 100.0f) : val;
             };
 
         // --- A. LINEAR GRADIENT ---
@@ -626,12 +626,24 @@ static std::vector<float> _splitFloatList(const std::string& s) {
     std::vector<float> out;
     size_t i = 0, n = s.size();
     auto isSep = [&](char c) { return c == ',' || std::isspace((unsigned char)c); };
+
     while (i < n) {
         while (i < n && isSep(s[i])) ++i;
         if (i >= n) break;
         size_t j = i;
         while (j < n && !isSep(s[j])) ++j;
-        try { out.push_back(std::stof(s.substr(i, j - i))); }
+
+        // Cắt chuỗi con và parse an toàn
+        std::string sub = s.substr(i, j - i);
+        try {
+            std::istringstream iss(sub);
+            iss.imbue(std::locale("C"));
+            float val;
+            iss >> val;
+            if (!iss.fail()) {
+                out.push_back(val);
+            }
+        }
         catch (...) {}
         i = j;
     }
@@ -642,11 +654,17 @@ static std::vector<float> _splitFloatList(const std::string& s) {
 
 float READSVG::ParseFloat(const std::string& s, float def) {
     if (s.empty()) return def;
+    // Xử lý nhanh trường hợp "210%" -> "210"
+    std::string cleanS = s;
+    if (cleanS.back() == '%') cleanS.pop_back();
+
     try {
-        size_t i = 0;
-        // đọc phần số, bỏ hậu tố đơn vị (px, %, ...)
-        while (i < s.size() && (std::isdigit((unsigned char)s[i]) || s[i] == '-' || s[i] == '+' || s[i] == '.' || s[i] == 'e' || s[i] == 'E')) ++i;
-        return std::stof(s.substr(0, i));
+        std::istringstream iss(cleanS);
+        iss.imbue(std::locale("C")); // Bắt buộc dùng dấu chấm
+        float val;
+        iss >> val;
+        if (iss.fail()) return def;
+        return val;
     }
     catch (...) { return def; }
 }

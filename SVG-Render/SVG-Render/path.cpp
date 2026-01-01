@@ -1,4 +1,6 @@
 ﻿#include "path.h"
+#include <d2d1.h>
+#pragma comment(lib, "d2d1.lib")
 #include <sstream>
 #include <vector>
 #include <string>
@@ -616,22 +618,77 @@ void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStro
 
     // 3. Render
     if (hasFill) {
-        if (useLinearGradient && !gColors.empty() && !gOffsets.empty() && gColors.size() == gOffsets.size()) {
-            std::vector<Gdiplus::Color> cols = gColors;
-            for (auto& c : cols) c = Gdiplus::Color(finalFillAlpha, c.GetR(), c.GetG(), c.GetB());
+        if (useLinearGradient && !gColors.empty()) {
+            // 1. Lấy khung bao chính xác của Path
+            Gdiplus::RectF bounds;
+            path.GetBounds(&bounds);
 
-            Gdiplus::LinearGradientBrush brush(gStart, gEnd, cols.front(), cols.back());
-            if (cols.size() > 2) {
-                brush.SetInterpolationColors(cols.data(), gOffsets.data(), (INT)cols.size());
+            // Tránh lỗi nếu Path là đường thẳng (Width hoặc Height = 0)
+            if (bounds.Width == 0) bounds.Width = 1.0f;
+            if (bounds.Height == 0) bounds.Height = 1.0f;
+
+            // 2. Chuyển đổi tọa độ từ đơn vị tỉ lệ (0..1) sang Pixel tuyệt đối
+            // p1, p2 được tính dựa trên khung bao của hình
+            Gdiplus::PointF p1(
+                bounds.X + gStart.X * bounds.Width,
+                bounds.Y + gStart.Y * bounds.Height
+            );
+            Gdiplus::PointF p2(
+                bounds.X + gEnd.X * bounds.Width,
+                bounds.Y + gEnd.Y * bounds.Height
+            );
+
+            // Xử lý các điểm dừng (Stops) và Độ trong suốt (Stop-Opacity)
+            // Giả sử gColors đã chứa Alpha từ stop-opacity lúc parse
+            std::vector<Gdiplus::Color> finalCols;
+            for (const auto& c : gColors) {
+                // Lấy alpha gốc của stop (c.GetA()) nhân với alpha tổng thể (finalFillAlpha)
+                BYTE combinedAlpha = (BYTE)((c.GetAlpha() * finalFillAlpha) / 255);
+                finalCols.emplace_back(combinedAlpha, c.GetR(), c.GetG(), c.GetB());
             }
 
+            // GDI+ yêu cầu LinearGradientBrush cần ít nhất 2 màu để khởi tạo
+            Gdiplus::LinearGradientBrush brush(p1, p2, finalCols.front(), finalCols.back());
+
+            // 3. Thiết lập mảng màu Interpolation (Quan trọng để hiển thị đúng dải màu SVG)
+            if (finalCols.size() == gOffsets.size()) {
+                std::vector<float> finalOffs = gOffsets;
+
+                // GDI+ yêu cầu offset đầu là 0.0 và cuối là 1.0
+                if (finalOffs.front() > 0.001f) {
+                    finalOffs.insert(finalOffs.begin(), 0.0f);
+                    finalCols.insert(finalCols.begin(), finalCols.front());
+                }
+                if (finalOffs.back() < 0.999f) {
+                    finalOffs.push_back(1.0f);
+                    finalCols.push_back(finalCols.back());
+                }
+
+                brush.SetInterpolationColors(finalCols.data(), finalOffs.data(), (INT)finalCols.size());
+            }
+
+            // 4. Xử lý GradientTransform (Nếu có)
+            // Với objectBoundingBox, transform diễn ra trong không gian đơn vị trước khi map vào bounds
             if (hasGradTransform) {
-                brush.MultiplyTransform(&gradMatrix, Gdiplus::MatrixOrderPrepend);
-            }
-            if (hasTransform) {
-                brush.MultiplyTransform(&transform, Gdiplus::MatrixOrderPrepend);
+                // Dịch chuyển về gốc tọa độ của hình để xoay/scale đúng tâm, sau đó mới dịch trở lại
+                Gdiplus::Matrix m;
+                m.Translate(bounds.X, bounds.Y);
+                m.Scale(bounds.Width, bounds.Height);
+
+                // Nhân ma trận biến đổi của Gradient
+                m.Multiply(&gradMatrix, Gdiplus::MatrixOrderPrepend);
+
+                // Đảo ngược lại ma trận Mapping ban đầu để brush áp dụng transform chính xác
+                Gdiplus::Matrix invM;
+                invM.Scale(1.0f / bounds.Width, 1.0f / bounds.Height);
+                invM.Translate(-bounds.X, -bounds.Y);
+
+                brush.MultiplyTransform(&invM, Gdiplus::MatrixOrderAppend);
+                brush.MultiplyTransform(&m, Gdiplus::MatrixOrderAppend);
             }
 
+            // 5. Vẽ hình
+            // Lưu ý: Không nhân thêm 'transform' của shape ở đây nếu 'g' đã được áp dụng transform chung
             g.FillPath(&brush, &path);
         }
         else if (useRadialGradient && !radColors.empty()) {
@@ -639,9 +696,12 @@ void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStro
             path.GetBounds(&bounds, nullptr, nullptr);
 
             Gdiplus::GraphicsPath gradPath;
-
+            gradPath.AddEllipse(-1.0f, -1.0f, 2.0f, 2.0f);
+            Matrix mat;
             if (radUserSpace) {
                 // userSpaceOnUse: Đơn vị Pixel
+                mat.Translate(radCx, radCy);
+                mat.Scale(radR, radR);
                 gradPath.AddEllipse(radCx - radR, radCy - radR, radR * 2, radR * 2);
                 if (hasGradTransform) gradPath.Transform(&gradMatrix);
             }
@@ -649,13 +709,11 @@ void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStro
                 // objectBoundingBox: Đơn vị 0..1
                 gradPath.AddEllipse(radCx - radR, radCy - radR, radR * 2, radR * 2);
 
-                Gdiplus::Matrix finalMat;
-                if (hasGradTransform) finalMat.Multiply(&gradMatrix, Gdiplus::MatrixOrderAppend);
+                if (hasGradTransform) mat.Multiply(&gradMatrix, Gdiplus::MatrixOrderAppend);
 
-                finalMat.Scale(bounds.Width, bounds.Height, Gdiplus::MatrixOrderAppend);
-                finalMat.Translate(bounds.X, bounds.Y, Gdiplus::MatrixOrderAppend);
-
-                gradPath.Transform(&finalMat);
+                mat.Translate(bounds.X + radCx * bounds.Width, bounds.Y + radCy * bounds.Height);
+                mat.Scale(radR* bounds.Width, radR* bounds.Height);
+                gradPath.Transform(&mat);
             }
 
             Gdiplus::PathGradientBrush pthGrBrush(&gradPath);
