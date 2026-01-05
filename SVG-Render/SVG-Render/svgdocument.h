@@ -39,5 +39,6 @@ public:
     void MoveDown();
     void MoveLeft();
     void MoveRight();
+    void Pan(float dx, float dy);
 };
 #endif // !SVGDOCUMENT_H

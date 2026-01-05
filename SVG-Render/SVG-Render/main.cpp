@@ -6,6 +6,7 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <commdlg.h>
+#include <cmath>
 
 // Link thư viện Gdiplus
 #pragma comment (lib,"Gdiplus.lib")
@@ -22,7 +23,9 @@ ULONG_PTR g_GdiToken;
 SVGDOCUMENT* g_doc = nullptr;
 HWND g_hButtonFile = NULL;
 std::vector<std::string> g_fileList;
-
+float currentAngle = 0.0f;
+bool g_isDragging = false;
+POINT g_lastMousePos = { 0, 0 };
 // --- HÀM HỖ TRỢ: LOAD FILE SVG ---
 void LoadSVGFile(const std::string& path, HWND hWnd) {
     if (g_doc) {
@@ -254,7 +257,56 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         break;
     }
+    case WM_LBUTTONDOWN:
+    {
+        // Khi nhấn chuột trái: Bắt đầu chế độ kéo
+        if (g_doc) {
+            g_isDragging = true;
 
+            // Lưu vị trí chuột hiện tại
+            g_lastMousePos.x = LOWORD(lParam);
+            g_lastMousePos.y = HIWORD(lParam);
+
+            // Bắt chuột (Capture) để khi kéo ra khỏi cửa sổ vẫn nhận được sự kiện
+            SetCapture(hWnd);
+        }
+        break;
+    }
+
+    case WM_MOUSEMOVE:
+    {
+        // Khi di chuyển chuột
+        if (g_isDragging && g_doc) {
+            // Lấy vị trí mới
+            int x = (short)LOWORD(lParam);
+            int y = (short)HIWORD(lParam);
+
+            // Tính khoảng cách di chuyển (Delta)
+            float dx = (float)(x - g_lastMousePos.x);
+            float dy = (float)(y - g_lastMousePos.y);
+
+            // Cập nhật vị trí hình
+            g_doc->Pan(dx, dy);
+
+            // Cập nhật lại vị trí cũ để dùng cho lần di chuyển tiếp theo
+            g_lastMousePos.x = x;
+            g_lastMousePos.y = y;
+
+            // Vẽ lại màn hình
+            InvalidateRect(hWnd, NULL, FALSE);
+        }
+        break;
+    }
+
+    case WM_LBUTTONUP:
+    {
+        // Khi nhả chuột trái: Kết thúc chế độ kéo
+        if (g_isDragging) {
+            g_isDragging = false;
+            ReleaseCapture(); // Thả chuột ra
+        }
+        break;
+    }
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;

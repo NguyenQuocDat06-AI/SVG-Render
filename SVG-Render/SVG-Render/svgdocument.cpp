@@ -9,64 +9,60 @@ void SVGDOCUMENT::AddShape(SVGSHAPE* s) {
 }
 
 void SVGDOCUMENT::Render(Gdiplus::Graphics& g, int destW, int destH) const {
-    // 1. Kiểm tra xem file có viewBox không (thường nằm ở thẻ gốc - node 0)
+    g.Clear(Gdiplus::Color(255, 255, 255, 255));
+    g.ResetTransform(); // Xóa sạch các biến đổi cũ
+
+    // 1. Lấy kích thước gốc của file SVG
+    float vx = 0, vy = 0, vw = 0, vh = 0;
     if (read.HasViewBox(0)) {
-       
         auto vb = read.GetViewBox(0);
-        float vx = std::get<0>(vb); // x
-        float vy = std::get<1>(vb); // y
-        float vw = std::get<2>(vb); // width
-        float vh = std::get<3>(vb); // height
-
-        if (vw > 0 && vh > 0 && destW > 0 && destH > 0) {
-            // --- TÍNH TOÁN TỶ LỆ SCALE ---
-            float scaleX = (float)destW / vw;
-            float scaleY = (float)destH / vh;
-
-            // Lấy tỷ lệ nhỏ hơn để hình nằm trọn trong màn hình ("meet")
-            // Nếu muốn hình phủ kín ("slice"), dùng std::max
-            float scale = min(scaleX, scaleY);
-
-            // --- TÍNH TOÁN VỊ TRÍ CĂN GIỮA (CENTER) ---
-            // Phần dư ra của màn hình chia đôi
-            float tx = (destW - vw * scale) / 2.0f;
-            float ty = (destH - vh * scale) / 2.0f;
-
-            // --- ÁP DỤNG TRANSFROM VÀO GRAPHICS ---
-            // Thứ tự quan trọng:
-            // 1. Dịch chuyển vùng vẽ ra giữa màn hình
-            g.TranslateTransform(tx, ty);
-
-            // 2. Phóng to/thu nhỏ theo tỷ lệ đã tính
-            g.ScaleTransform(scale, scale);
-
-            // 3. Dịch chuyển ngược lại để gốc tọa độ khớp với (vx, vy) của viewBox
-            g.TranslateTransform(-vx, -vy);
-        }
+        vx = std::get<0>(vb); vy = std::get<1>(vb);
+        vw = std::get<2>(vb); vh = std::get<3>(vb);
     }
+    // Nếu file không có viewbox, lấy đại kích thước màn hình để không lỗi
+    if (vw <= 0 || vh <= 0) { vw = (float)destW; vh = (float)destH; }
 
-    // 2. Vẽ các hình như bình thường
-    // Lúc này Graphics 'g' đã mang ma trận biến đổi, nên các tọa độ nhỏ trong SVG
-    // sẽ tự động được phóng to lên màn hình.
-    g.Clear(Gdiplus::Color(255, 255, 255, 255)); // nền trắng
-    //===Rotate===
-    float centerX = destW / 2.0f;
-    float centerY = destH / 2.0f;
-    g.TranslateTransform(centerX, centerY);
+    // 2. Tính tỷ lệ Scale cơ bản để hình vừa khít màn hình lúc đầu
+    float scaleX = (float)destW / vw;
+    float scaleY = (float)destH / vh;
+    float baseScale = (std::min)(scaleX, scaleY);
+
+    // Tỷ lệ thực tế = Tỷ lệ gốc * Tỷ lệ user zoom
+    float finalScale = baseScale * zoomFactor;
+
+    // --- BẮT ĐẦU CHUỖI BIẾN ĐỔI MA TRẬN (SỬA LẠI CHỖ NÀY) ---
+
+    // Bước A: Xác định vị trí TÂM HÌNH sẽ nằm ở đâu trên màn hình.
+    // Mặc định là giữa màn hình (destW/2) + khoảng cách bạn di chuyển (translateX)
+    float screenCenterX = (destW / 3.0f) + translateX;
+    float screenCenterY = (destH / 3.0f) + translateY;
+
+    // Bước B: Dời gốc tọa độ đến vị trí đó
+    g.TranslateTransform(screenCenterX, screenCenterY);
+
+    // Bước C: Xoay (Lúc này gốc tọa độ đang ở đúng tâm hình, nên nó sẽ xoay tại chỗ)
     g.RotateTransform(rotationAngle);
-    g.TranslateTransform(-centerX, -centerY);
-    //===Translate===
-    g.TranslateTransform(translateX, translateY);
-    //===Zoom===
-    g.ScaleTransform(zoomFactor, zoomFactor);
 
+    // Bước D: Zoom
+    g.ScaleTransform(finalScale, finalScale);
+
+    // Bước E: Dịch lùi lại một nửa kích thước SVG
+    // Để đảm bảo điểm (0,0) hiện tại trùng khớp với tâm của hình SVG
+    float svgCenterX = vx + vw / 3.0f;
+    float svgCenterY = vy + vh / 3.0f;
+    g.TranslateTransform(-svgCenterX, -svgCenterY);
+
+    // 3. Thiết lập chế độ vẽ đẹp
     g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
     g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
     g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+
+    // 4. Vẽ hình
     for (auto s : shapes) {
         s->Draw(g);
     }
-    // Reset lại transform để không ảnh hưởng nếu vẽ cái khác sau đó
+
+    g.ResetTransform();
 }
 BYTE SVGDOCUMENT::clamp255(int v) {
     if (v < 0) v = 0; else if (v > 255) v = 255;
@@ -423,4 +419,8 @@ void SVGDOCUMENT::MoveLeft() {
 }
 void SVGDOCUMENT::MoveRight() {
     translateX += 10.0f;
+}
+void SVGDOCUMENT::Pan(float dx, float dy) {
+    translateX += dx;
+    translateY += dy;
 }
