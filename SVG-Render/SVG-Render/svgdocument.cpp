@@ -345,7 +345,7 @@ void SVGDOCUMENT::LoadSvgToDocument(const std::string& path) {
 
                         for (size_t k = 0; k < lGrd.colors.size(); ++k) {
                             const auto& c = lGrd.colors[k];
-                            // FIX 1: Lấy Alpha từ phần tử thứ 4 (nếu có), nếu không thì 255
+                            // Lấy Alpha từ phần tử thứ 4 (nếu có), nếu không thì 255
                             int a = (c.size() >= 4) ? c[3] : 255;
 
                             if (c.size() >= 3) {
@@ -358,10 +358,6 @@ void SVGDOCUMENT::LoadSvgToDocument(const std::string& path) {
                         if (!cols.empty()) {
                             Gdiplus::PointF p1(lGrd.x1, lGrd.y1);
                             Gdiplus::PointF p2(lGrd.x2, lGrd.y2);
-
-                            // Lưu ý: Nếu SVG dùng objectBoundingBox, SVGPATH sẽ cần xử lý lại toạ độ này
-                            // dựa trên bounds của path. Code hiện tại đang truyền thẳng.
-
                             s->SetLinearGradient(p1, p2, cols, offs, lGrd.gradientTransform);
                         }
                     }
@@ -369,61 +365,22 @@ void SVGDOCUMENT::LoadSvgToDocument(const std::string& path) {
                     else {
                         RadialGradientDef rGrd;
                         if (read.TryGetRadialGradient(id, rGrd) && !rGrd.colors.empty()) {
+                            std::vector<Gdiplus::Color> cols;
+                            std::vector<float> offs;
 
-                            // FIX 1: Đảo ngược offset ĐÚNG CÁCH
-                            // SVG: offset 0 = Tâm (focal), offset 1 = Biên (edge)
-                            // GDI+: offset 0 = Biên (edge), offset 1 = Tâm (center)
-
-                            struct StopEntry {
-                                float offset;
-                                Gdiplus::Color col;
-                            };
-                            std::vector<StopEntry> finalStops;
-
+                            // Chỉ chuyển đổi dữ liệu thô, KHÔNG đảo ngược offset, KHÔNG sort tại đây
                             for (size_t k = 0; k < rGrd.colors.size(); ++k) {
                                 const auto& c = rGrd.colors[k];
-                                float rawOff = (k < rGrd.offsets.size()) ? rGrd.offsets[k] : 0.0f;
-
-                                // Lấy Alpha
                                 int a = (c.size() >= 4) ? c[3] : 255;
 
                                 if (c.size() >= 3) {
-                                    
-                                    float gdiOffset = 1.0f - rawOff;
-
-                                    // Clamp về [0, 1]
-                                    if (gdiOffset < 0.0f) gdiOffset = 0.0f;
-                                    if (gdiOffset > 1.0f) gdiOffset = 1.0f;
-
-                                    finalStops.push_back({
-                                        gdiOffset,
-                                        Gdiplus::Color((BYTE)a, (BYTE)c[0], (BYTE)c[1], (BYTE)c[2])
-                                        });
+                                    cols.emplace_back((BYTE)a, (BYTE)c[0], (BYTE)c[1], (BYTE)c[2]);
+                                    float off = (k < rGrd.offsets.size()) ? rGrd.offsets[k] : 0.0f;
+                                    offs.push_back(off);
                                 }
-                            }
-
-                            // FIX 2: QUAN TRỌNG - Sort tăng dần theo offset
-                            // GDI+ YÊU CẦU offset phải tăng dần NGHIÊM NGẶT
-                            std::sort(finalStops.begin(), finalStops.end(),
-                                [](const StopEntry& a, const StopEntry& b) {
-                                    return a.offset < b.offset;
-                                });
-
-                            // Tách ra 2 vector
-                            std::vector<Gdiplus::Color> cols;
-                            std::vector<float> offs;
-                            for (const auto& entry : finalStops) {
-                                cols.push_back(entry.col);
-                                offs.push_back(entry.offset);
                             }
 
                             if (!cols.empty()) {
-                                // Đảm bảo có ít nhất 2 màu (yêu cầu của GDI+)
-                                if (cols.size() == 1) {
-                                    cols.push_back(cols[0]);
-                                    offs.push_back(1.0f);
-                                }
-
                                 bool isUserSpace = (rGrd.units == "userSpaceOnUse");
                                 s->SetRadialGradient(
                                     rGrd.cx, rGrd.cy, rGrd.r,

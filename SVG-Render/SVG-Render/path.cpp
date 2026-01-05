@@ -618,17 +618,20 @@ void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStro
 
     // 3. Render
     if (hasFill) {
+        // 1. Lấy khung bao và mở rộng nhẹ để khử răng cưa
+        Gdiplus::RectF bounds;
+        path.GetBounds(&bounds);
+        bounds.Inflate(1.0f, 1.0f);
+
+        // Tránh lỗi nếu Path quá nhỏ
+        if (bounds.Width <= 0.0f) bounds.Width = 1.0f;
+        if (bounds.Height <= 0.0f) bounds.Height = 1.0f;
+
         if (useLinearGradient && !gColors.empty()) {
-            // 1. Lấy khung bao chính xác của Path
-            Gdiplus::RectF bounds;
-            path.GetBounds(&bounds);
+            // --- XỬ LÝ LINEAR GRADIENT ---
+            // (Giữ nguyên logic Linear của bạn nếu nó đang ổn, 
+            // hoặc cập nhật tương tự logic Bounds mới ở đây)
 
-            // Tránh lỗi nếu Path là đường thẳng (Width hoặc Height = 0)
-            if (bounds.Width == 0) bounds.Width = 1.0f;
-            if (bounds.Height == 0) bounds.Height = 1.0f;
-
-            // 2. Chuyển đổi tọa độ từ đơn vị tỉ lệ (0..1) sang Pixel tuyệt đối
-            // p1, p2 được tính dựa trên khung bao của hình
             Gdiplus::PointF p1(
                 bounds.X + gStart.X * bounds.Width,
                 bounds.Y + gStart.Y * bounds.Height
@@ -638,23 +641,16 @@ void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStro
                 bounds.Y + gEnd.Y * bounds.Height
             );
 
-            // Xử lý các điểm dừng (Stops) và Độ trong suốt (Stop-Opacity)
-            // Giả sử gColors đã chứa Alpha từ stop-opacity lúc parse
             std::vector<Gdiplus::Color> finalCols;
             for (const auto& c : gColors) {
-                // Lấy alpha gốc của stop (c.GetA()) nhân với alpha tổng thể (finalFillAlpha)
                 BYTE combinedAlpha = (BYTE)((c.GetAlpha() * finalFillAlpha) / 255);
                 finalCols.emplace_back(combinedAlpha, c.GetR(), c.GetG(), c.GetB());
             }
 
-            // GDI+ yêu cầu LinearGradientBrush cần ít nhất 2 màu để khởi tạo
             Gdiplus::LinearGradientBrush brush(p1, p2, finalCols.front(), finalCols.back());
 
-            // 3. Thiết lập mảng màu Interpolation (Quan trọng để hiển thị đúng dải màu SVG)
             if (finalCols.size() == gOffsets.size()) {
                 std::vector<float> finalOffs = gOffsets;
-
-                // GDI+ yêu cầu offset đầu là 0.0 và cuối là 1.0
                 if (finalOffs.front() > 0.001f) {
                     finalOffs.insert(finalOffs.begin(), 0.0f);
                     finalCols.insert(finalCols.begin(), finalCols.front());
@@ -663,22 +659,15 @@ void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStro
                     finalOffs.push_back(1.0f);
                     finalCols.push_back(finalCols.back());
                 }
-
                 brush.SetInterpolationColors(finalCols.data(), finalOffs.data(), (INT)finalCols.size());
             }
 
-            // 4. Xử lý GradientTransform (Nếu có)
-            // Với objectBoundingBox, transform diễn ra trong không gian đơn vị trước khi map vào bounds
             if (hasGradTransform) {
-                // Dịch chuyển về gốc tọa độ của hình để xoay/scale đúng tâm, sau đó mới dịch trở lại
                 Gdiplus::Matrix m;
                 m.Translate(bounds.X, bounds.Y);
                 m.Scale(bounds.Width, bounds.Height);
-
-                // Nhân ma trận biến đổi của Gradient
                 m.Multiply(&gradMatrix, Gdiplus::MatrixOrderPrepend);
 
-                // Đảo ngược lại ma trận Mapping ban đầu để brush áp dụng transform chính xác
                 Gdiplus::Matrix invM;
                 invM.Scale(1.0f / bounds.Width, 1.0f / bounds.Height);
                 invM.Translate(-bounds.X, -bounds.Y);
@@ -687,84 +676,186 @@ void SVGPATH::DrawImpl(Gdiplus::Graphics& g, BYTE finalFillAlpha, BYTE finalStro
                 brush.MultiplyTransform(&m, Gdiplus::MatrixOrderAppend);
             }
 
-            // 5. Vẽ hình
-            // Lưu ý: Không nhân thêm 'transform' của shape ở đây nếu 'g' đã được áp dụng transform chung
+            brush.SetWrapMode(Gdiplus::WrapModeTileFlipXY);
             g.FillPath(&brush, &path);
         }
         else if (useRadialGradient && !radColors.empty()) {
-            Gdiplus::RectF bounds;
-            path.GetBounds(&bounds, nullptr, nullptr);
+            // --- XỬ LÝ RADIAL GRADIENT (LOGIC CODE 1 CHUẨN) ---
 
-            Gdiplus::GraphicsPath gradPath;
-            gradPath.AddEllipse(-1.0f, -1.0f, 2.0f, 2.0f);
-            Matrix mat;
-            if (radUserSpace) {
-                // userSpaceOnUse: Đơn vị Pixel
-                mat.Translate(radCx, radCy);
-                mat.Scale(radR, radR);
-                gradPath.AddEllipse(radCx - radR, radCy - radR, radR * 2, radR * 2);
-                if (hasGradTransform) gradPath.Transform(&gradMatrix);
+            // 1. Chuẩn bị các biến kích thước thực tế (Pixel)
+            float rCx = radCx;
+            float rCy = radCy;
+            float rR = radR;
+            float rFx = radFx;
+            float rFy = radFy;
+
+            // Tính đường chéo của Bounds
+            float bboxDiag = sqrt(bounds.Width * bounds.Width + bounds.Height * bounds.Height);
+
+            // Xử lý objectBoundingBox (Theo logic Code 1)
+            if (!radUserSpace) {
+                rCx = bounds.X + rCx * bounds.Width;
+                rCy = bounds.Y + rCy * bounds.Height;
+
+                // Scale bán kính theo đường chéo hộp đơn vị (Code 1)
+                float dim = bboxDiag / sqrt(2.0f);
+                rR = rR * dim;
+
+                if (rFx == FLT_MAX) rFx = rCx;
+                else rFx = bounds.X + rFx * bounds.Width;
+
+                if (rFy == FLT_MAX) rFy = rCy;
+                else rFy = bounds.Y + rFy * bounds.Height;
             }
             else {
-                // objectBoundingBox: Đơn vị 0..1
-                gradPath.AddEllipse(radCx - radR, radCy - radR, radR * 2, radR * 2);
+                if (rFx == FLT_MAX) rFx = rCx;
+                if (rFy == FLT_MAX) rFy = rCy;
+            }
 
-                if (hasGradTransform) mat.Multiply(&gradMatrix, Gdiplus::MatrixOrderAppend);
+            if (rR <= 0.1f) rR = 0.1f;
 
-                mat.Translate(bounds.X + radCx * bounds.Width, bounds.Y + radCy * bounds.Height);
-                mat.Scale(radR* bounds.Width, radR* bounds.Height);
-                gradPath.Transform(&mat);
+            // 2. TÍNH TOÁN BÁN KÍNH VẼ (DrawRadius) & TỈ LỆ (ScaleRatio)
+            // Vẽ hình tròn lớn gấp 1.5 lần đường chéo để xử lý Pad
+            float drawRadius = (std::max)(rR, bboxDiag) * 1.5f;
+            float scaleRatio = rR / drawRadius;
+
+            // 3. Tạo GraphicsPath với DrawRadius
+            Gdiplus::GraphicsPath gradPath;
+            // Tạo shape tại 0,0 trước để dễ Transform nếu cần, sau đó mới dời về vị trí thật
+            // Hoặc tạo thẳng tại vị trí nếu xử lý Matrix riêng.
+            // Ở đây ta tạo thẳng tại vị trí rCx, rCy nhưng với bán kính LỚN
+            gradPath.AddEllipse(rCx - drawRadius, rCy - drawRadius, drawRadius * 2, drawRadius * 2);
+
+            // 4. Xử lý Matrix (Gradient Transform) - FIX LỖI COMPILER
+            if (hasGradTransform) {
+                if (!radUserSpace) {
+                    // Logic: Reset path về gốc -> Transform -> Move về vị trí thật
+
+                    // FIX LỖI 1: Không copy Matrix trực tiếp. Tạo mới và Multiply.
+                    Gdiplus::Matrix svgM;
+                    svgM.Multiply(&gradMatrix);
+
+                    gradPath.Reset();
+                    gradPath.AddEllipse(-drawRadius, -drawRadius, drawRadius * 2, drawRadius * 2);
+                    gradPath.Transform(&svgM);
+
+                    // FIX LỖI 2: GraphicsPath không có Translate. Dùng Matrix.
+                    Gdiplus::Matrix moveMat;
+                    moveMat.Translate(rCx, rCy);
+                    gradPath.Transform(&moveMat);
+                }
+                else {
+                    gradPath.Transform(&gradMatrix);
+                }
             }
 
             Gdiplus::PathGradientBrush pthGrBrush(&gradPath);
 
-            // Tính tâm (Focal Point)
-            Gdiplus::PointF centerPoint(radFx, radFy);
-            if (radUserSpace) {
-                if (hasGradTransform) gradMatrix.TransformPoints(&centerPoint);
-            }
-            else {
-                Gdiplus::Matrix pointMat;
-                if (hasGradTransform) pointMat.Multiply(&gradMatrix, Gdiplus::MatrixOrderAppend);
-                pointMat.Scale(bounds.Width, bounds.Height, Gdiplus::MatrixOrderAppend);
-                pointMat.Translate(bounds.X, bounds.Y, Gdiplus::MatrixOrderAppend);
-                pointMat.TransformPoints(&centerPoint);
+            // 5. Thiết lập Focal Point
+            Gdiplus::PointF centerPoint(rFx, rFy);
+            if (hasGradTransform) {
+                if (!radUserSpace) {
+                    Gdiplus::Matrix svgM;
+                    svgM.Multiply(&gradMatrix);
+                    // Áp dụng offset (Translate) vào Matrix để transform điểm Focal
+                    svgM.Translate(rCx, rCy, Gdiplus::MatrixOrderAppend);
+                    // svgM.TransformPoints(&centerPoint); // (Bỏ comment nếu cần transform cả Focal Point)
+                }
+                else {
+                    gradMatrix.TransformPoints(&centerPoint);
+                }
             }
             pthGrBrush.SetCenterPoint(centerPoint);
 
-            // Xử lý màu (Đảo ngược theo logic đã fix)
+            // --- 6. XỬ LÝ MÀU & OFFSET (THEO CODE 1) ---
+
+            // B1: Sort Stops
             struct StopEntry { float offset; Gdiplus::Color col; };
-            std::vector<StopEntry> finalStops;
+            std::vector<StopEntry> sortedStops;
             for (size_t k = 0; k < radColors.size(); ++k) {
-                float rawOff = (k < radOffsets.size()) ? radOffsets[k] : 0.0f;
+                float off = (k < radOffsets.size()) ? radOffsets[k] : 0.0f;
+                // Clamp 0..1
+                if (off < 0.0f) off = 0.0f; if (off > 1.0f) off = 1.0f;
+
                 int a = (radColors[k].GetAlpha() * finalFillAlpha) / 255;
-                // Offset đã đảo ở svgdocument, giữ nguyên
-                float gdiOffset = rawOff;
-                if (gdiOffset < 0.0f) gdiOffset = 0.0f; else if (gdiOffset > 1.0f) gdiOffset = 1.0f;
-                finalStops.push_back({ gdiOffset, Gdiplus::Color((BYTE)a, radColors[k].GetR(), radColors[k].GetG(), radColors[k].GetB()) });
+                sortedStops.push_back({ off, Gdiplus::Color((BYTE)a, radColors[k].GetR(), radColors[k].GetG(), radColors[k].GetB()) });
             }
-            // Sort
-            std::sort(finalStops.begin(), finalStops.end(), [](const StopEntry& a, const StopEntry& b) { return a.offset < b.offset; });
+            std::sort(sortedStops.begin(), sortedStops.end(), [](const StopEntry& a, const StopEntry& b) { return a.offset < b.offset; });
 
-            std::vector<Gdiplus::Color> cols; std::vector<float> offs;
-            if (!finalStops.empty() && finalStops.front().offset > 0.001f) { cols.push_back(finalStops.front().col); offs.push_back(0.0f); }
-            for (const auto& e : finalStops) { cols.push_back(e.col); offs.push_back(e.offset); }
-            if (!finalStops.empty() && finalStops.back().offset < 0.999f) { cols.push_back(finalStops.back().col); offs.push_back(1.0f); }
+            // B2: Map Offset theo ScaleRatio (0 -> 1)
+            std::vector<Gdiplus::Color> tempColors;
+            std::vector<float> tempPos;
 
-            if (!cols.empty()) {
-                if (cols.size() == 1) { cols.push_back(cols[0]); offs.push_back(1.0f); }
-                pthGrBrush.SetInterpolationColors(cols.data(), offs.data(), (INT)cols.size());
+            if (!sortedStops.empty() && sortedStops.front().offset > 0.0001f) {
+                tempPos.push_back(0.0f);
+                tempColors.push_back(sortedStops.front().col);
+            }
 
-                // Tô nền pad
-                if (cols.size() > 0) {
-                    Gdiplus::SolidBrush bgBrush(cols[0]);
-                    g.FillPath(&bgBrush, &path);
+            for (const auto& s : sortedStops) {
+                tempPos.push_back(s.offset * scaleRatio);
+                tempColors.push_back(s.col);
+            }
+
+            // B3: Handle Pad (Kéo dài màu cuối ra 1.0 trên hình tròn to)
+            if (scaleRatio < 0.999f) {
+                Gdiplus::Color lastColor = tempColors.back();
+                if (tempPos.back() < scaleRatio) {
+                    tempPos.push_back(scaleRatio);
+                    tempColors.push_back(lastColor);
                 }
-                g.FillPath(&pthGrBrush, &path);
+                tempPos.push_back(1.0f);
+                tempColors.push_back(lastColor);
             }
+            else {
+                if (tempPos.back() < 1.0f) {
+                    tempPos.push_back(1.0f);
+                    tempColors.push_back(tempColors.back());
+                }
+            }
+
+            // B4: ĐẢO NGƯỢC MẢNG (Reversing) 
+            // SVG (Tâm->Biên) sang GDI+ (Biên->Tâm)
+            int count = (int)tempColors.size();
+            std::vector<Gdiplus::Color> finalColors;
+            std::vector<float> finalPos;
+
+            for (int i = count - 1; i >= 0; --i) {
+                float newPos = 1.0f - tempPos[i];
+                Gdiplus::Color newCol = tempColors[i];
+
+                if (!finalPos.empty() && newPos <= finalPos.back()) {
+                    newPos = finalPos.back() + 0.0001f;
+                }
+                // Clamp float error
+                if (newPos < 0.0f) newPos = 0.0f;
+                if (newPos > 1.0f) newPos = 1.0f;
+
+                if (finalPos.empty()) newPos = 0.0f;
+
+                finalPos.push_back(newPos);
+                finalColors.push_back(newCol);
+            }
+
+            // Đảm bảo phần tử cuối là 1.0
+            if (finalPos.back() < 1.0f) finalPos.back() = 1.0f;
+            if (finalPos.size() < 2) {
+                finalPos.push_back(1.0f);
+                finalColors.push_back(finalColors.back());
+            }
+
+            // 7. Thiết lập Brush
+            pthGrBrush.SetCenterColor(finalColors.back());
+            pthGrBrush.SetInterpolationColors(finalColors.data(), finalPos.data(), (INT)finalColors.size());
+
+            // WrapMode Clamp (từ Code 1)
+            pthGrBrush.SetWrapMode(Gdiplus::WrapModeClamp);
+
+            // Đã xóa SetGammaCorrection theo yêu cầu
+
+            g.FillPath(&pthGrBrush, &path);
         }
         else {
-            // Solid Fill (không dùng gradient)
+            // Solid Fill
             Gdiplus::SolidBrush fillBrush(Gdiplus::Color(finalFillAlpha,
                 fillColor.GetR(), fillColor.GetG(), fillColor.GetB()));
             g.FillPath(&fillBrush, &path);
